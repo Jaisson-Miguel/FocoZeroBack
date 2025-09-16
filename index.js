@@ -67,4 +67,36 @@ app.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
 });
 
+app.post("/cadastrar", async (req, res) => {
+  try{
+    const{nome, cpf, senha, funcao} = req.body;
+
+    if (!nome || !senha || !cpf) {
+      return res.status(400).json({message: "Nome, CPF e senha são obrigatórios."});
+    }
+
+    const cpfExiste = await Usuario.findOne({cpf});
+    if(cpfExiste){
+      return res.status(400).json({message:"Usuário com esse CPF já cadastrado."});
+    }
+
+    const senhaCriptografada = bcrypt.hashSync(senha, 8);
+
+    const novoUsuario = await Usuario.create({
+      nome, cpf, senha: senhaCriptografada, funcao: funcao || "agente",
+    });
+
+    res.status(201).json({message:"Usuário cadastrado com sucesso.", 
+      usuario: {
+        id: novoUsuario._id,
+        nome: novoUsuario.nome,
+        cpf: novoUsuario.cpf,
+        funcao: novoUsuario.funcao,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({message:"Erro interno. ", error: error.message});
+  }
+});
+
 startApp();
