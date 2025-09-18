@@ -1,7 +1,7 @@
 import {Schema, Model, model} from "mongoose";
 
 const usuarioModel = new Schema({
-    nonme:{
+    nome:{
         type:String,
         required:true
     },

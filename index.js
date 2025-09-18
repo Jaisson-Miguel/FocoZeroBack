@@ -7,9 +7,10 @@ import jwtVerify from "./services/jwt-verify.js";
 
 import jwt from "jsonwebtoken";
 
-import Usuario from "./Schemas/Usuario";
+import Usuario from "./Schemas/Usuario.js";
+import Area from "./Schemas/Area.js";
 
-import conn from "./db/conn";
+import conn from "./db/conn.js";
 
 const SECRET_KEY = process.env.SECRET_KEY;
 const PORT = process.env.PORT || 3333;
@@ -39,6 +40,7 @@ app.post("/login", async (req, res) => {
     }
 
     const senhaCorreta = bcrypt.compareSync(senha, usuario.senha);
+
     if(!senhaCorreta){
       return res.status(400).json({message:"Senha incorreta."});
     }
@@ -67,7 +69,7 @@ app.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
 });
 
-app.post("/cadastrar", async (req, res) => {
+app.post("/cadastrarUsuario", async (req, res) => {
   try{
     const{nome, cpf, senha, funcao} = req.body;
 
@@ -96,6 +98,25 @@ app.post("/cadastrar", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({message:"Erro interno. ", error: error.message});
+  }
+});
+
+app.post("/cadastrarArea", async (req, res) => {
+  try{
+    const {nome, mapaUrl} = req.body;
+
+    if(!nome || !mapaUrl){
+      return res.status(400).json({message:"Nome e mapa são obrigatórios."});
+    }
+
+    const novaArea = await Area.create({nome, mapaUrl});
+
+    res.status(201).json({
+      message: "Área cadastrada com sucesso.",
+      area: novaArea
+    });
+  } catch (error) {
+    res.status(500).json({message: "Erro ao cadastrar área.", error: error.message});
   }
 });
 
