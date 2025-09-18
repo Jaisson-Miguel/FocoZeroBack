@@ -11,6 +11,7 @@ import Usuario from "./Schemas/Usuario.js";
 import Area from "./Schemas/Area.js";
 import Quarteirao from "./Schemas/Quarteirao.js";
 import Imovel from "./Schemas/Imovel.js";
+import Visita from "./Schemas/Visita.js";
 
 import conn from "./db/conn.js";
 
@@ -28,6 +29,11 @@ const startApp = async () => {
 const app = express();
 app.use(express.json());
 
+app.listen(PORT, () => {
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
+});
+
+// LOGIN
 app.post("/login", async (req, res) => {
   try {
     const {cpf, senha} = req.body;
@@ -67,10 +73,7 @@ app.post("/login", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
-});
-
+// USUARIO
 app.post("/cadastrarUsuario", async (req, res) => {
   try{
     const{nome, cpf, senha, funcao} = req.body;
@@ -103,6 +106,61 @@ app.post("/cadastrarUsuario", async (req, res) => {
   }
 });
 
+app.get("/listarUsuarios", async (req, res) => {
+  try {
+    const usuarios = await Usuario.find();
+
+    if(!usuarios || usuarios.length === 0){
+      return res.status(404).json({message: "Usuários não encontrado.s"});
+    }
+
+    res.json(usuarios);
+
+  } catch (error) {
+    res.status(500).json({message:"Erro ao listar usuários", erorr: erorr.message});
+  }
+});
+
+app.put("/editarUsuario/:id", async (req, res) => {
+  try {
+    const {id} = req.params;
+    const {nome, cpf, senha, funcao} = req.body;
+
+    let updateData = {nome, cpf, funcao};
+    if (senha) {
+      updateData.senha = bcrypt.hashSync(senha, 8);
+    }
+
+    const usuarioAtualizado = await Usuario.findByIdAndUpdate(id, updateData, {new:true});
+
+    if(!usuarioAtualizado){
+      return res.status(400).json({message:"Usuário não encontrado."});
+    }
+
+    res.json({message:"Usuário atualizado com sucesso.", usuario:usuarioAtualizado});
+
+  } catch (error) {
+    res.status(500).json({message:"Erro ao cadastrar usuário.", error:error.message});
+  }
+});
+
+app.delete("/excluirUsuario/:id", async (req, res) => {
+  try {
+    const {id} = req.params;
+
+    const usuarioExcluido = await Usuario.findByIdAndDelete(id);
+
+    if(!usuarioExcluido){
+      res.status(404).json({message:"Usuário não encontrado."});
+    }
+
+    res.status(200).json({message:"Usuário excluído com sucesso."});
+  } catch (error) {
+    res.status(500).json({message:"Erro ao excluir usuário. ", error: error.message});
+  }
+});
+
+// AREA
 app.post("/cadastrarArea", async (req, res) => {
   try{
     const {nome, mapaUrl} = req.body;
@@ -135,6 +193,51 @@ app.get("/listarAreas", async (req, res) => {
     res.status(500).json({message:"Erro ao buscar áreas.", error: error.message});
   }
 });
+
+app.put("/editarArea/:id", async (req, res) => {
+  try {
+    const {id} = req.params;
+    const {nome, mapaUrl} = req.body;
+
+    const updateData = {};
+    if (nome) updateData.nome = nome;
+    if (mapaUrl) updateData.mapaUrl = mapaUrl;
+
+    const areaAtualizada = await Area.findByIdAndUpdate(id, updateData, {new: true});
+
+    if(!areaAtualizada){
+      return res.status(404).json({message:"Área não encontrada."});
+    };
+
+    res.status(200).json({message: "Área editada com sucesso.", area:areaAtualizada});
+
+  } catch (error) {
+    res.status(500).json({message:"Erro ao editar área.", error:error.message});
+  }
+});
+
+app.delete("/excluirArea/:id", async (req, res) => {
+  try {
+    const {id} = req.params;
+
+    const areaExcluida = await Area.findByIdAndDelete(id);
+
+    if(!areaExcluida){
+      return res.status(404).json({message:"Área não encontrada."});
+    };
+
+    const quarteiroes = await Quarteirao.find({ idArea: id });
+    const quarteiraoIds = quarteiroes.map(q => q._id);
+
+    await Imovel.deleteMany({idQuarteirao: { $in: quarteiraoIds }})
+    await Quarteirao.deleteMany({idArea: id});
+
+    res.status(200).json({message:"Área e quarteirões excluídos com sucesso"});
+  } catch (error) {
+    res.status(500).json({message: "Erro ao excluir área", error:error.message});
+  }
+});
+
 
 app.post("/cadastrarQuarteirao", async (req, res) => {
   try {
@@ -192,10 +295,10 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
 
 app.post("/cadastrarImovel", async (req, res) => {
   try {
-    const {idQuarteirao, logradouro, numero, status} = req.body;
+    const {idQuarteirao, logradouro, numero, tipo, qtdHabitantes, qtdCachorros, qtdGatos, observacao, status} = req.body;
 
-    if(!idQuarteirao || !logradouro || !numero){
-      return res.status(400).json({message:"Id do quarteirão e endereço são obrigatórios."});
+    if(!idQuarteirao || !logradouro || !numero || tipo ){
+      return res.status(400).json({message:"Id do quarteirão, tipo de imóvel e endereço são obrigatórios."});
     }
 
     const quarteiraoExistente = await Quarteirao.findById(idQuarteirao);
@@ -207,10 +310,14 @@ app.post("/cadastrarImovel", async (req, res) => {
       idQuarteirao,
       logradouro,
       numero,
+      qtdHabitantes: qtdHabitantes || 0,
+      qtdCachorros: qtdCachorros || 0,
+      qtdGatos: qtdGatos || 0,
+      observacao: observacao || "Nenhuma observação.",
       status: status || "fechado",
     });
 
-    res.status(200).json({
+    res.status(500).json({
       message: "Imóvel cadastrado com sucesso.",
       imovel: novoImovel
     });
@@ -242,7 +349,54 @@ app.get("/listarImoveis/:idQuarteirao", async (req, res) => {
     res.json(imoveis);
 
   } catch (error) {
-    res.status(200).json({message:"Erro ao listar imóveis.", error:error.message});
+    res.status(500).json({message:"Erro ao listar imóveis.", error:error.message});
+  }
+});
+
+app.post("/cadastrarVisita", async (req, res) => {
+  try {
+    const {
+      idImovel,
+      idQuarteirao,
+      idAgente,
+      tipo,
+      dataVisita,
+      depositos,
+      foco,
+      qtdLarvicida,
+      sincronizado,
+      status
+    } = req.body;
+
+    if(!idImovel || !idQuarteirao || !idAgente || !tipo){
+      return res.status(400).json({message:"Preencha os campos obrigatórios."});
+    }
+
+    const imovelExiste = await Imovel.findById(idImovel);
+    if(!imovelExiste){
+      return res.status(404).json({message: "Imóvel não encontrado."});
+    }
+
+    const novaVisita = await Visita.create({
+      idImovel,
+      idQuarteirao,
+      idAgente,
+      tipo: imovelExiste.tipo,
+      dataVisita: dataVisita || Date.now(),
+      depositos,
+      foco,
+      qtdLarvicida,
+      sincronizado,
+      status
+    });
+
+    res.status(200).json({
+      message: "Visita realizada com sucesso",
+      visita: novaVisita
+    });
+
+  } catch (error) {
+    res.status(500).json({message:"Erro ao lançar visita.", error: error.message});
   }
 });
 

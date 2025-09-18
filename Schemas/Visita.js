@@ -25,7 +25,8 @@ const visitaModel = new Schema({
   },
   dataVisita:{
     type: Date,
-    required: true
+    required: true,
+    default: Date.now
   },
   depositos: {
     a1: { type: Number, default: 0 },
@@ -50,6 +51,12 @@ const visitaModel = new Schema({
     type: String,
     enum:["pendente", "sincronizado"],
     default: "pendente",
+    required: true,
+  },
+  status: {
+    type: String,
+    enum: ["visitado", "recusa", "fechado"],
+    default: "fechado",
     required: true,
   }
 });

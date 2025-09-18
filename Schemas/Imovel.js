@@ -16,12 +16,33 @@ const imovelModel = new Schema({
     type: Number,
     required: true,
   },
-  status:{
+  tipo:{
+    type: String,
+    enum:["r", "c", "tb", "pe", "out"],
+    required:true
+  },
+  qtdHabitantes:{
+    type: Number,
+    default: 0,
+  },
+  qtdCachorros:{
+    type: Number,
+    default: 0,
+  },
+  qtdGatos:{
+    type: Number,
+    default: 0,
+  },
+  observacao:{
+    type: String,
+    default: "Nenhuma observação."
+  },
+  status: {
     type: String,
     enum: ["visitado", "recusa", "fechado"],
     default: "fechado",
     required: true,
-  },
+  }
 });
 
 export default model("Imovel", imovelModel);
