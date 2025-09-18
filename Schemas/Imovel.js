@@ -8,8 +8,12 @@ const imovelModel = new Schema({
     ref: "Quarteirao",
     required: true,
   },
-  endereco: {
+  logradouro: {
     type: String,
+    required: true,
+  },
+  numero: {
+    type: Number,
     required: true,
   },
   status:{

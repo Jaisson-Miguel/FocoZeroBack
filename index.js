@@ -9,6 +9,8 @@ import jwt from "jsonwebtoken";
 
 import Usuario from "./Schemas/Usuario.js";
 import Area from "./Schemas/Area.js";
+import Quarteirao from "./Schemas/Quarteirao.js";
+import Imovel from "./Schemas/Imovel.js";
 
 import conn from "./db/conn.js";
 
@@ -117,6 +119,130 @@ app.post("/cadastrarArea", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({message: "Erro ao cadastrar área.", error: error.message});
+  }
+});
+
+app.get("/listarAreas", async (req, res) => {
+  try {
+    const areas = await Area.find();
+
+    if(!areas || areas.length === 0){
+      return res.status(404).json({message:"Nenhuma área encontrada."});
+    }
+
+    res.json(areas);
+  } catch (error) {
+    res.status(500).json({message:"Erro ao buscar áreas.", error: error.message});
+  }
+});
+
+app.post("/cadastrarQuarteirao", async (req, res) => {
+  try {
+    const {idArea, numero} = req.body;
+
+    if (!idArea || numero === undefined){
+      return res.status(400).json({message:"Id da área e número do quarteirão são obrigatórios."});
+    }
+
+    const areaExiste = await Area.findById(idArea);
+    if(!areaExiste){
+      return res.status(404).json({message:"Área não encontrada."});
+    }
+
+    const quarteiraoExistente = await Quarteirao.findOne({ idArea, numero });
+    if (quarteiraoExistente) {
+      return res.status(400).json({ message: "Já existe um quarteirão com esse número nessa área." });
+    }
+
+    const novoQuarteirao = await Quarteirao.create({idArea, numero});
+
+    res.status(200).json({
+      message: "Quarteirão cadastrado com sucesso.",
+      quarteirao: novoQuarteirao
+    });
+  } catch(error){
+    res.status(500).json({message:"Erro ao cadastrar quarteirão.", error:error.message});
+  }
+});
+
+app.get("/listarQuarteiroes/:idArea", async (req, res) => {
+  try {
+    const {idArea} = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(idArea)) {
+      return res.status(400).json({ message: "ID do quarteirão inválido." });
+    }
+
+    const areaExiste = await Area.findById(idArea);
+    if(!areaExiste){
+      return res.status(404).json({message:"Área não encontrada."});
+    }
+
+    const quarteiroes = await Quarteirao.find({idArea});
+
+    if(!quarteiroes || quarteiroes.length === 0){
+      return res.status(404).json({message:"Nenhum quarteirão encontrado."});
+    }
+
+    res.json(quarteiroes);
+  } catch (error) {
+    res.status(500).json({message:"Erro ao buscar quarteirões", error: error.message});
+  }
+});
+
+app.post("/cadastrarImovel", async (req, res) => {
+  try {
+    const {idQuarteirao, logradouro, numero, status} = req.body;
+
+    if(!idQuarteirao || !logradouro || !numero){
+      return res.status(400).json({message:"Id do quarteirão e endereço são obrigatórios."});
+    }
+
+    const quarteiraoExistente = await Quarteirao.findById(idQuarteirao);
+    if(!quarteiraoExistente){
+      return res.status(404).json({message:"Quarteirão não encontrado."});
+    }
+
+    const novoImovel = await Imovel.create({
+      idQuarteirao,
+      logradouro,
+      numero,
+      status: status || "fechado",
+    });
+
+    res.status(200).json({
+      message: "Imóvel cadastrado com sucesso.",
+      imovel: novoImovel
+    });
+
+  } catch (error) {
+    res.status(500).json({message:"Erro ao cadastrar imóvel.", error: error.message});
+  }
+});
+
+app.get("/listarImoveis/:idQuarteirao", async (req, res) => {
+  try {
+    const {idQuarteirao} = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(idQuarteirao)) {
+      return res.status(400).json({ message: "ID do quarteirão inválido." });
+    }
+
+    const quarteiraoExiste = await Quarteirao.findById(idQuarteirao);
+    if (!quarteiraoExiste) {
+      return res.status(404).json({ message:"Quarteirão não encontrado." });
+    }
+
+    const imoveis = await Imovel.find({idQuarteirao});
+
+    if (!imoveis || imoveis.length === 0) {
+      return res.status(404).json({ message: "Nenhum imóvel encontrado neste quarteirão." });
+    }
+
+    res.json(imoveis);
+
+  } catch (error) {
+    res.status(200).json({message:"Erro ao listar imóveis.", error:error.message});
   }
 });
 
