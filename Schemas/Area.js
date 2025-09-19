@@ -7,6 +7,18 @@ const areaModel = new Schema({
     type: String,
     required: true,
   },
+  codigo: {
+    type: Number,
+    required: true
+  },
+  zona:{
+    type: Number,
+    required: true
+  },
+  categoria:{
+    type: String,
+    required: true,
+  },
   mapaUrl: {
     type: String,
     required: true,

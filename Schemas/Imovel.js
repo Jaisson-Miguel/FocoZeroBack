@@ -13,7 +13,7 @@ const imovelModel = new Schema({
     required: true,
   },
   numero: {
-    type: Number,
+    type: String,
     required: true,
   },
   tipo:{

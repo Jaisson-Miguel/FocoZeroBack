@@ -8,11 +8,6 @@ const visitaModel = new Schema({
     ref: "Imovel",
     required: true,
   },
-  idQuarteirao:{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Quarteirao",
-    required: true,
-  },
   idAgente: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Usuario",
@@ -20,7 +15,7 @@ const visitaModel = new Schema({
   },
   tipo:{
     type: String,
-    enum: ["visitado", "recusa", "fechado"],
+    enum: ["r", "c", "tb", "out","pe"],
     required: true,
   },
   dataVisita:{
@@ -28,7 +23,7 @@ const visitaModel = new Schema({
     required: true,
     default: Date.now
   },
-  depositos: {
+  depositosInspecionados: {
     a1: { type: Number, default: 0 },
     a2: { type: Number, default: 0 },
     b: { type: Number, default: 0 },
@@ -36,6 +31,10 @@ const visitaModel = new Schema({
     d1: { type: Number, default: 0 },
     d2: { type: Number, default: 0 },
     e: { type: Number, default: 0 },
+  },
+  qtdDepEliminado:{
+    type: Number,
+    default: 0
   },
   foco:{
     type: Boolean,
@@ -46,6 +45,10 @@ const visitaModel = new Schema({
     type: Number,
     default: 0,
     required: true,
+  },
+  qtdDepTratado:{
+    type: Number,
+    default: 0
   },
   sincronizado:{
     type: String,
