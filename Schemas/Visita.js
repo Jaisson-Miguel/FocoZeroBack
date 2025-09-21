@@ -20,7 +20,6 @@ const visitaModel = new Schema({
   },
   dataVisita:{
     type: Date,
-    required: true,
     default: Date.now
   },
   depositosInspecionados: {
@@ -36,15 +35,21 @@ const visitaModel = new Schema({
     type: Number,
     default: 0
   },
+  amostraInicial:{
+    type: Number,
+    default: 0
+  },
+  amostraFinal:{
+    type: Number,
+    default: 0
+  },
   foco:{
     type: Boolean,
     default: false,
-    required: true,
   },
   qtdLarvicida:{
     type: Number,
     default: 0,
-    required: true,
   },
   qtdDepTratado:{
     type: Number,
@@ -54,13 +59,11 @@ const visitaModel = new Schema({
     type: String,
     enum:["pendente", "sincronizado"],
     default: "pendente",
-    required: true,
   },
   status: {
     type: String,
     enum: ["visitado", "recusa", "fechado"],
     default: "fechado",
-    required: true,
   }
 });
 
