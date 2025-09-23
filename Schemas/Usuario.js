@@ -11,13 +11,13 @@ const usuarioModel = new Schema({
         unique:true
     },
     senha:{
-    type:String,
-    required:true
+        type:String,
+        required:true
     },
     funcao:{
-    type:String,
-    required:true,
-    default:"agente"
+        type:String,
+        required:true,
+        default:"agente"
     },
 });
 

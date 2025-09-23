@@ -41,7 +41,6 @@ const imovelModel = new Schema({
     type: String,
     enum: ["visitado", "recusa", "fechado"],
     default: "fechado",
-    required: true,
   }
 });
 

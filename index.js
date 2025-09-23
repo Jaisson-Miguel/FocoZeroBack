@@ -12,6 +12,7 @@ import Area from "./Schemas/Area.js";
 import Quarteirao from "./Schemas/Quarteirao.js";
 import Imovel from "./Schemas/Imovel.js";
 import Visita from "./Schemas/Visita.js";
+import Diario from "./Schemas/Diario.js";
 
 import conn from "./db/conn.js";
 
@@ -283,8 +284,8 @@ app.post("/cadastrarQuarteirao", async (req, res) => {
     }
 
     const areaExiste = await Area.findById(idArea);
-    if (!areaExiste) {
-      return res.status(404).json({ message: "Área não encontrada." });
+    if(!areaExiste){
+      return res.status(404).json({message:"Área não encontrada."});
     }
 
     await Quarteirao.updateMany(
@@ -314,8 +315,8 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
     }
 
     const areaExiste = await Area.findById(idArea);
-    if (!areaExiste) {
-      return res.status(404).json({ message: "Área não encontrada." });
+    if(!areaExiste){
+      return res.status(404).json({message:"Área não encontrada."});
     }
 
     const quarteiroes = await Quarteirao.find({ idArea });
@@ -339,10 +340,10 @@ app.put("/editarQuarteirao/:id", async (req, res) => {
 
     let updateData = {};
     if (numero !== undefined) updateData.numero = numero;
-    if (idArea) {
+    if (idArea){
       const areaExiste = Area.findById(idArea);
-      if (!areaExiste) {
-        res.status(404).json({ message: "Área não encontrada." });
+      if(!areaExiste){
+        res.status(404).json({message:"Área não encontrada."});
       }
       updateData.idArea = idArea;
     }
@@ -413,8 +414,8 @@ app.post("/cadastrarImovel", async (req, res) => {
     }
 
     const quarteiraoExistente = await Quarteirao.findById(idQuarteirao);
-    if (!quarteiraoExistente) {
-      return res.status(404).json({ message: "Quarteirão não encontrado." });
+    if(!quarteiraoExistente){
+      return res.status(404).json({message:"Quarteirão não encontrado."});
     }
     console.log(req.body);
 
@@ -451,7 +452,7 @@ app.get("/listarImoveis/:idQuarteirao", async (req, res) => {
 
     const quarteiraoExiste = await Quarteirao.findById(idQuarteirao);
     if (!quarteiraoExiste) {
-      return res.status(404).json({ message: "Quarteirão não encontrado." });
+      return res.status(404).json({ message:"Quarteirão não encontrado." });
     }
 
     const imoveis = await Imovel.find({ idQuarteirao });
@@ -485,8 +486,8 @@ app.put("/editarImovel/:id", async (req, res) => {
     } = req.body;
 
     const imovelExiste = await Imovel.findById(id);
-    if (!imovelExiste) {
-      res.status(404).json({ message: "Imóvel não encontrado." });
+    if(!imovelExiste){
+      res.status(404).json({message:"Imóvel não encontrado."});
     }
 
     const imovelAtualizado = await Imovel.findByIdAndUpdate(
@@ -520,8 +521,8 @@ app.delete("/excluirImovel/:id", async (req, res) => {
     const { id } = req.params;
 
     const imovelExiste = await Imovel.findById(id);
-    if (!imovelExiste) {
-      res.status(404).json({ message: "Imóvel não encontrado." });
+    if(!imovelExiste){
+      res.status(404).json({message:"Imóvel não encontrado."});
     }
 
     await Imovel.findByIdAndDelete(id);
@@ -558,19 +559,23 @@ app.post("/cadastrarVisita", async (req, res) => {
     }
 
     const imovelExiste = await Imovel.findById(idImovel);
-    if (!imovelExiste) {
-      return res.status(404).json({ message: "Imóvel não encontrado." });
+    if(!imovelExiste){
+      return res.status(404).json({message: "Imóvel não encontrado."});
     }
 
-    const dataBruta = req.body.dataVisita || new Date();
-    const dataSomente = new Date(dataBruta);
-    dataSomente.setHours(0, 0, 0, 0);
+    if(imovel.status === "visitado"){
+      return res.status(400).json({ message: "Este imóvel já foi visitado." });
+    }
+
+    const dataBruta = dataVisita ? new Date(dataVisita) : new Date();
+
+    const dataUTC = new Date(Date.UTC(dataBruta.getFullYear(), dataBruta.getMonth(), dataBruta.getDate(), 0, 0, 0));
 
     const novaVisita = await Visita.create({
       idImovel,
       idAgente,
-      tipo: imovelExiste.tipo,
-      dataVisita: dataSomente,
+      tipo: imovel.tipo,
+      dataVisita: dataUTC,
       depositosInspecionados,
       qtdDepEliminado,
       foco,
@@ -579,6 +584,8 @@ app.post("/cadastrarVisita", async (req, res) => {
       sincronizado,
       status,
     });
+
+    await Imovel.findByIdAndUpdate(idImovel, { status: status });
 
     res.status(200).json({
       message: "Visita realizada com sucesso",
@@ -591,92 +598,123 @@ app.post("/cadastrarVisita", async (req, res) => {
   }
 });
 
-//DIÁRIO
-app.get("/relatorioDiario/:idAgente/:idArea/:data", async (req, res) => {
+app.get("/listarVisita", async (req, res) => {
   try {
-    const { idAgente, idArea, data } = req.params;
-    const partes = data.split("-");
-    const ano = parseInt(partes[0], 10);
-    const mes = parseInt(partes[1], 10) - 1;
-    const dia = parseInt(partes[2], 10);
+    const { idAgente, data } = req.body;
 
-    const inicio = new Date(Date.UTC(ano, mes, dia, 0, 0, 0, 0));
-    const fim = new Date(Date.UTC(ano, mes, dia, 23, 59, 59, 999));
+    if (!idAgente || !data) {
+      return res.status(400).json({ message: "Preencha os campos obrigatórios."});
+    }
+
+    const inicio = new Date(data);
+    inicio.setHours(0,0,0,0);
+    const fim = new Date(data);
+    fim.setHours(23,59,59,999);
 
     const visitas = await Visita.find({
       idAgente,
-      dataVisita: { $gte: inicio, $lte: fim },
+      dataVisita: { $gte: inicio, $lte: fim }
     }).populate({
       path: "idImovel",
       populate: { path: "idQuarteirao" },
     });
 
-    const visitasArea = visitas.filter((v) => {
+    const visitasArea = visitas.filter(v => {
       const quarteirao = v.idImovel?.idQuarteirao;
       return quarteirao && quarteirao.idArea?.toString() === idArea;
     });
 
-    if (!visitasArea.length) {
-      return res.status(404).json({ message: "Nenhuma visita encontrada." });
+    if (!visitas.length) {
+      return res.status(404).json({ message: "Nenhuma visita encontrada para essa data e área." });
     }
 
     const resumo = {
-      totalQuarteiroesTrabalhados: new Set(
-        visitasArea.map((v) => v.idImovel.idQuarteirao._id.toString())
-      ).size,
+      totalQuarteiroesTrabalhados: new Set(visitasArea.map(v => v.idImovel.idQuarteirao._id.toString())).size,
       totalVisitas: 0,
-      totalPorTipoImovel: { r: 0, c: 0, tb: 0, pe: 0, out: 0 },
-      totalDepositosInspecionados: {
-        a1: 0,
-        a2: 0,
-        b: 0,
-        c: 0,
-        d1: 0,
-        d2: 0,
-        e: 0,
-      },
+      totalPorTipoImovel: { r:0, c:0, tb:0, pe:0, out:0 },
+      totalDepositosInspecionados: { a1:0, a2:0, b:0, c:0, d1:0, d2:0, e:0 },
       totalDepositosEliminados: 0,
       imoveisComLarvicida: 0,
       totalLarvicidaAplicada: 0,
-      depositosTratadosComLarvicida: 0,
+      depositosTratadosComLarvicida: 0
     };
 
-    visitas.forEach((v) => {
+    visitas.forEach(v => {
       if (v.status === "visitado") {
         resumo.totalVisitas += 1;
 
         resumo.totalPorTipoImovel[v.tipo] += 1;
 
-        const depositos = v.depositosInspecionados.toObject();
+        const depositos = v.depositosInspecionados.toObject(); 
         for (let key in depositos) {
           resumo.totalDepositosInspecionados[key] += depositos[key];
         }
 
-        resumo.totalDepositosEliminados += v.qtdDepEliminado;
+      resumo.totalDepEliminados += v.qtdDepEliminado;
 
-        if (v.qtdLarvicida > 0) {
-          resumo.imoveisComLarvicida += 1;
-          resumo.totalLarvicidaAplicada += v.qtdLarvicida;
-          resumo.depositosTratadosComLarvicida += v.qtdDepTratado;
-        }
+      if (v.qtdLarvicida > 0) {
+        resumo.totalImoveisLarvicida += 1;
+        resumo.totalQtdLarvicida += v.qtdLarvicida;
+        resumo.totalDepLarvicida += v.qtdDepTratado;
+      }
+
+      if (v.foco) {
+      resumo.imoveisComFoco += 1;
       }
     });
 
-    const area = await Area.findById(idArea);
+    const semana = numeroSemana(dataRef);
 
-    res.json({
-      nomeArea: area.name,
-      codigoArea: area._id,
-      semana: numeroSemana(inicio),
+    const diario = await Diario.create({
+      idAgente,
+      idArea,
+      semana,
+      data: dataRef,
+      atividade: atividade || 4,
+      resumo
+    });
+
+    res.status(200).json({
+      message: "Diário cadastrado com sucesso.",
+      diario
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: "Erro ao cadastrar diário.", error: error.message });
+  }
+});
+
+app.get("/listarDiario/:idAgente/:idArea/:semana", async (req, res) => {
+  try {
+    const { idAgente, idArea, semana } = req.params;
+
+    const diario = await Diario.findOne({
+      idAgente,
+      idArea,
+      semana: parseInt(semana, 10)
+    });
+
+    if (!diario) {
+      return res.status(404).json({ message: "Diário não encontrado para essa semana." });
+    }
+
+    res.json(diario);
+  } catch (error) {
+    res.status(500).json({message:"Erro ao listar diário.", error: error.message});
+  }
+});
+
+app.put("/editarDiario/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      semana,
       data,
       visitas: visitasArea,
-      resumo,
+      resumo
     });
   } catch (error) {
-    res.status(500).json({
-      message: "Erro ao gerar relatório diário.",
-      error: error.message,
-    });
+    res.status(500).json({ message: "Erro ao gerar relatório diário.", error: error.message });
   }
 });
 
@@ -686,6 +724,21 @@ function numeroSemana(d) {
   data.setDate(data.getDate() + 4 - dia);
   const ano1 = new Date(data.getFullYear(), 0, 1);
   return Math.ceil(((data - ano1) / 86400000 + 1) / 7);
+}
+
+function areaExiste(id){
+  const resposta = Area.findById(id);
+  return resposta;
+}
+
+function quarteiraoExiste(id){
+  const resposta = Quarteirao.findById(id);
+  return resposta;
+}
+
+function imovelExiste(id){
+  const resposta = Imovel.findById(id);
+  return resposta;
 }
 
 startApp();
