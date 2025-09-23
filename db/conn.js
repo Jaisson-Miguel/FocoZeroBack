@@ -5,6 +5,7 @@ dotenv.config();
 const conn = async () => {
   try {
     await mongoose.connect(process.env.URL_DATABASE);
+
     return true;
   } catch (error) {
     process.exit(1);
