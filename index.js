@@ -208,7 +208,6 @@ app.get("/listarAreas", async (req, res) => {
     }
 
     res.json(areas);
-    console.log(areas[0].mapaUrl);
   } catch (error) {
     res
       .status(500)
