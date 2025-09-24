@@ -13,6 +13,7 @@ import Quarteirao from "./Schemas/Quarteirao.js";
 import Imovel from "./Schemas/Imovel.js";
 import Visita from "./Schemas/Visita.js";
 import Diario from "./Schemas/Diario.js";
+import Semanal from "./Schemas/Semanal.js";
 
 import conn from "./db/conn.js";
 
@@ -417,7 +418,6 @@ app.post("/cadastrarImovel", async (req, res) => {
     if(!quarteiraoExistente){
       return res.status(404).json({message:"Quarteirão não encontrado."});
     }
-    console.log(req.body);
 
     const novoImovel = await Imovel.create({
       idQuarteirao,
@@ -431,7 +431,7 @@ app.post("/cadastrarImovel", async (req, res) => {
       status: status || "fechado",
     });
 
-    res.status(500).json({
+    res.status(200).json({
       message: "Imóvel cadastrado com sucesso.",
       imovel: novoImovel,
     });
@@ -563,7 +563,7 @@ app.post("/cadastrarVisita", async (req, res) => {
       return res.status(404).json({message: "Imóvel não encontrado."});
     }
 
-    if(imovel.status === "visitado"){
+    if(imovelExiste.status === "visitado"){
       return res.status(400).json({ message: "Este imóvel já foi visitado." });
     }
 
@@ -574,7 +574,7 @@ app.post("/cadastrarVisita", async (req, res) => {
     const novaVisita = await Visita.create({
       idImovel,
       idAgente,
-      tipo: imovel.tipo,
+      tipo: imovelExiste.tipo,
       dataVisita: dataUTC,
       depositosInspecionados,
       qtdDepEliminado,
@@ -633,7 +633,8 @@ app.get("/listarVisita", async (req, res) => {
       totalVisitas: 0,
       totalPorTipoImovel: { r:0, c:0, tb:0, pe:0, out:0 },
       totalDepositosInspecionados: { a1:0, a2:0, b:0, c:0, d1:0, d2:0, e:0 },
-      totalDepositosEliminados: 0,
+      totalImoveisLarvicida,
+      totalDepEliminados: 0,
       imoveisComLarvicida: 0,
       totalLarvicidaAplicada: 0,
       depositosTratadosComLarvicida: 0
@@ -684,6 +685,86 @@ app.get("/listarVisita", async (req, res) => {
   }
 });
 
+app.put("/editarVisita/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      tipo,
+      dataVisita,
+      depositosInspecionados,
+      qtdDepEliminado,
+      foco,
+      qtdLarvicida,
+      qtdDepTratado,
+      sincronizado,
+      status
+    } = req.body;
+
+    const visitaExiste = await Visita.findById(id);
+    if (!visitaExiste) {
+      return res.status(404).json({ message: "Visita não encontrada." });
+    }
+
+    const dataAtualizada = dataVisita
+      ? new Date(Date.UTC(new Date(dataVisita).getFullYear(), new Date(dataVisita).getMonth(), new Date(dataVisita).getDate(), 0, 0, 0))
+      : visitaExiste.dataVisita;
+
+    const visitaAtualizada = await Visita.findByIdAndUpdate(
+      id,
+      {
+        tipo,
+        dataVisita: dataAtualizada,
+        depositosInspecionados,
+        qtdDepEliminado,
+        foco,
+        qtdLarvicida,
+        qtdDepTratado,
+        sincronizado,
+        status
+      },
+      { new: true }
+    );
+
+    res.status(200).json({
+      message: "Visita editada com sucesso.",
+      visita: visitaAtualizada
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: "Erro ao editar visita.", error: error.message });
+  }
+});
+
+app.delete("/excluirVisita", async (req, res) => {
+  try {
+    const { idAgente, idImovel, data} = req.body;
+
+    const inicio = new Date(data);
+    inicio.setHours(0,0,0,0);
+    const fim = new Date(data);
+    fim.setHours(23,59,59,999);
+
+    if (!idAgente || !idImovel || !data) {
+      return res.status(400).json({ message: "Preencha os campos obrigatórios."});
+    }
+
+    const visitaRemovida = await Visita.findOneAndDelete({
+      idAgente,
+      idImovel,
+      dataVisita: { $gte: inicio, $lte: fim }
+    });
+
+    if (!visitaRemovida) {
+      return res.status(404).json({ message: "Nenhuma visita encontrada para remover." });
+    }
+
+    res.status(200).json({ message: "Visita removida com sucesso.", visita: visitaRemovida });
+
+  } catch (error) {
+    res.status(500).json({ message: "Erro ao deletar visita.", error: error.message });
+  }
+});
+
 // DIÁRIO
 app.post("/cadastrarDiario", async (req, res) => {
   try {
@@ -708,23 +789,26 @@ app.post("/cadastrarDiario", async (req, res) => {
       populate: { path: "idQuarteirao" }
     });
 
-    visitas = visitas.filter(v => v.idImovel.idQuarteirao.idArea.toString() === idArea);
+    visitas = visitas.filter(v => v.idImovel?.idQuarteirao?.idArea?.toString() === idArea);
 
     if (!visitas.length) {
       return res.status(404).json({ message: "Nenhuma visita encontrada para essa data e área." });
     }
 
     const resumo = {
-      totalQuarteiroesTrabalhados: new Set(visitas.map(v => v.idImovel.idQuarteirao._id.toString())).size,
+      totalQuarteiroesTrabalhados: new Set(visitas.map(v => v.idImovel.idQuarteirao.numero)).size,
       totalVisitas: visitas.length,
-      totalVisitasTipo: { r:0, c:0, tb:0, pe:0, out:0 },
-      totalDepInspecionados: { a1:0, a2:0, b:0, c:0, d1:0, d2:0, e:0 },
+      totalVisitasTipo: { r: 0, c: 0, tb: 0, pe: 0, out: 0 },
+      totalDepInspecionados: { a1: 0, a2: 0, b: 0, c: 0, d1: 0, d2: 0, e: 0 },
       totalDepEliminados: 0,
       totalImoveisLarvicida: 0,
       totalQtdLarvicida: 0,
       totalDepLarvicida: 0,
       imoveisComFoco: 0,
+      quarteiroesTrabalhados: ""
     };
+
+    const quarteiroesSet = new Set();
 
     visitas.forEach(v => {
       resumo.totalVisitasTipo[v.tipo] += 1;
@@ -742,9 +826,15 @@ app.post("/cadastrarDiario", async (req, res) => {
       }
 
       if (v.foco) {
-      resumo.imoveisComFoco += 1;
+        resumo.imoveisComFoco += 1;
+      }
+
+      if (v.idImovel?.idQuarteirao?.numero) {
+        quarteiroesSet.add(v.idImovel.idQuarteirao.numero);
       }
     });
+
+    resumo.quarteiroesTrabalhados = Array.from(quarteiroesSet).sort((a, b) => a - b).join(", ");
 
     const semana = numeroSemana(dataRef);
 
@@ -766,6 +856,7 @@ app.post("/cadastrarDiario", async (req, res) => {
     res.status(500).json({ message: "Erro ao cadastrar diário.", error: error.message });
   }
 });
+
 
 app.get("/listarDiario/:idAgente/:idArea/:semana", async (req, res) => {
   try {
@@ -826,6 +917,111 @@ app.put("/editarDiario/:id", async (req, res) => {
     res.status(500).json({ message: "Erro ao gerar relatório diário.", error: error.message });
   }
 });
+
+app.delete("/excluirDiario/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: "Preencha os campos obrigatórios." });
+    }
+
+    const diarioRemovido = await Diario.findByIdAndDelete(id);
+
+    if (!diarioRemovido) {
+      return res.status(404).json({ message: "Diário não encontrado." });
+    }
+
+    res.status(200).json({ message: "Diário removido com sucesso.", diario: diarioRemovido });
+
+  } catch (error) {
+    res.status(500).json({message:"Erro ao excluir diário.", error:error.message});
+  }
+});
+
+// SEMANAL
+app.post("/cadastrarSemanal", async (req, res) => {
+  try {
+    const { idAgente, idArea, semana, atividade } = req.body;
+
+    if (!idAgente || !idArea || !semana) {
+      return res.status(400).json({ message: "Preencha os campos obrigatórios." });
+    }
+
+    const diarios = await Diario.find({
+      idAgente,
+      idArea,
+      semana
+    });
+
+    if (!diarios.length) {
+      return res.status(404).json({ message: "Nenhum diário encontrado para essa semana e área." });
+    }
+
+    const resumo = {
+      totalQuarteiroesTrabalhados: 0,
+      totalVisitas: 0,
+      totalVisitasTipo: { r:0, c:0, tb:0, pe:0, out:0 },
+      totalDepInspecionados: { a1:0, a2:0, b:0, c:0, d1:0, d2:0, e:0 },
+      totalDepEliminados: 0,
+      totalImoveisLarvicida: 0,
+      totalQtdLarvicida: 0,
+      totalDepLarvicida: 0,
+      imoveisComFoco: 0,
+    };
+
+    const quarteiroesSet = new Set();
+    const diasSet = new Set();
+
+    diarios.forEach(d => {
+      resumo.totalQuarteiroesTrabalhados += d.resumo.totalQuarteiroesTrabalhados;
+      resumo.totalVisitas += d.resumo.totalVisitas;
+
+      for (let key in resumo.totalVisitasTipo) {
+        resumo.totalVisitasTipo[key] += d.resumo.totalVisitasTipo[key] || 0;
+      }
+
+      for (let key in resumo.totalDepInspecionados) {
+        resumo.totalDepInspecionados[key] += d.resumo.totalDepInspecionados[key] || 0;
+      }
+
+      resumo.totalDepEliminados += d.resumo.totalDepEliminados;
+      resumo.totalImoveisLarvicida += d.resumo.totalImoveisLarvicida;
+      resumo.totalQtdLarvicida += d.resumo.totalQtdLarvicida;
+      resumo.totalDepLarvicida += d.resumo.totalDepLarvicida;
+      resumo.imoveisComFoco += d.resumo.imoveisComFoco;
+
+      if (d.resumo.quarteiroesTrabalhados) {
+        d.resumo.quarteiroesTrabalhados.split(",").forEach(q => quarteiroesSet.add(q.trim()));
+      }
+
+      diasSet.add(d.data.toISOString().slice(0,10));
+    });
+
+    resumo.quarteiroesTrabalhados = Array.from(quarteiroesSet).sort().join(", ");
+    const qtdDiasTrabalhados = diasSet.size;
+
+    const semanal = await Semanal.create({
+      idAgente,
+      idArea,
+      semana,
+      atividade: atividade || 4,
+      quarteiroesTrabalhados: resumo.quarteiroesTrabalhados,
+      qtdDiasTrabalhados,
+      resumo
+    });
+
+    res.status(200).json({
+      message: "Relatório semanal cadastrado com sucesso.",
+      semanal
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: "Erro ao cadastrar relatório semanal.", error: error.message });
+  }
+});
+
+
 
 
 function numeroSemana(d) {
