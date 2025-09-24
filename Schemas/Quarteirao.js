@@ -12,6 +12,29 @@ const quarteiraoModel = new Schema({
     type: Number,
     required: true,
   },
+  totalImoveisTipo: {
+      r: { type: Number, default: 0 },
+      c: { type: Number, default: 0 },
+      tb: { type: Number, default: 0 },
+      pe: { type: Number, default: 0 },
+      out: { type: Number, default: 0 }
+    },
+  totalImoveis:{
+    type: Number,
+    default: 0
+  },
+    qtdHabitantes: {
+    type: Number,
+    default: 0,
+  },
+  qtdCachorros: {
+    type: Number,
+    default: 0,
+  },
+  qtdGatos: {
+    type: Number,
+    default: 0,
+  },
 });
 
 export default model("Quarteirao", quarteiraoModel);

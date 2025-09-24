@@ -294,7 +294,21 @@ app.post("/cadastrarQuarteirao", async (req, res) => {
       { $inc: { numero: 1 } }
     );
 
-    const novoQuarteirao = await Quarteirao.create({ idArea, numero });
+    const novoQuarteirao = await Quarteirao.create({
+      idArea,
+      numero,
+        totalImoveis: 0,
+        totalImoveisTipo: {
+          r: 0,
+          c: 0,
+          tb: 0,
+          pe: 0,
+          out: 0
+        },
+        qtdHabitantes: 0,
+        qtdCachorros: 0,
+        qtdGatos: 0
+    });
 
     res.status(200).json({
       message: "Quarteirão cadastrado com sucesso.",
@@ -429,6 +443,16 @@ app.post("/cadastrarImovel", async (req, res) => {
       qtdCachorros: qtdCachorros || 0,
       qtdGatos: qtdGatos || 0,
       observacao: observacao || "Nenhuma observação.",
+    });
+
+    await Quarteirao.findByIdAndUpdate(idQuarteirao, {
+      $inc: {
+        totalImoveis: 1,
+        [`totalImoveisTipo.${tipo}`]: 1,
+        qtdHabitantes: qtdHabitantes || 0,
+        qtdCachorros: qtdCachorros || 0,
+        qtdGatos: qtdGatos || 0
+      }
     });
 
     res.status(200).json({
