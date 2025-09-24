@@ -520,8 +520,8 @@ app.put("/editarImovel/:id", async (req, res) => {
       status,
     } = req.body;
 
-    const imovelExiste = await Imovel.findById(id);
-    if (!imovelExiste) {
+    const imovelAntigo = await Imovel.findById(id);
+    if (!imovelAntigo) {
       res.status(404).json({ message: "Imóvel não encontrado." });
     }
 
@@ -945,9 +945,14 @@ app.post("/cadastrarDiario", async (req, res) => {
   }
 });
 
-app.get("/listarDiario/:idAgente/:idArea/:semana", async (req, res) => {
+app.get("/listarDiario", async (req, res) => {
   try {
-    const { idAgente, idArea, semana } = req.params;
+    const { idAgente, idArea, semana } = req.query;
+    const filtro = {};
+
+    if (idAgente) filtro.idAgente = idAgente;
+    if (idArea) filtro.idArea = idArea;
+    if (semana) filtro.semana = semana;
 
     const diario = await Diario.findOne({
       idAgente,
@@ -961,7 +966,7 @@ app.get("/listarDiario/:idAgente/:idArea/:semana", async (req, res) => {
         .json({ message: "Diário não encontrado para essa semana." });
     }
 
-    res.json(diario);
+    res.status(200).json(diario);
   } catch (error) {
     res
       .status(500)
@@ -1131,6 +1136,101 @@ app.post("/cadastrarSemanal", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Erro ao cadastrar relatório semanal.",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/listarSemanal", async (req, res) => {
+  try {
+    const { idAgente, idArea, semana } = req.query;
+    const filtro = {};
+
+    if (idAgente) filtro.idAgente = idAgente;
+    if (idArea) filtro.idArea = idArea;
+    if (semana) filtro.semana = semana;
+
+    const semanais = await Semanal.find(filtro);
+
+    if (!semanais.length) {
+      return res
+        .status(404)
+        .json({ message: "Nenhum relatório semanal encontrado." });
+    }
+
+    res.status(200).json(semanais);
+  } catch (error) {
+    res.status(500).json({
+      message: "Erro ao buscar relatórios semanais.",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/listarSemanal/:id", async (req, res) => {
+  try {
+    const semanal = await Semanal.findById(req.params.id);
+
+    if (!semanal) {
+      return res
+        .status(404)
+        .json({ message: "Relatório semanal não encontrado." });
+    }
+
+    res.status(200).json(semanal);
+  } catch (error) {
+    res.status(500).json({
+      message: "Erro ao buscar relatório semanal.",
+      error: error.message,
+    });
+  }
+});
+
+app.put("/editarSemanal/:id", async (req, res) => {
+  try {
+    const { atividade, quarteiroesTrabalhados, qtdDiasTrabalhados, resumo } =
+      req.body;
+
+    const semanal = await Semanal.findByIdAndUpdate(
+      req.params.id,
+      { atividade, quarteiroesTrabalhados, qtdDiasTrabalhados, resumo },
+      { new: true, runValidators: true }
+    );
+
+    if (!semanal) {
+      return res
+        .status(404)
+        .json({ message: "Relatório semanal não encontrado." });
+    }
+
+    res.status(200).json({
+      message: "Relatório semanal atualizado com sucesso.",
+      semanal,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Erro ao atualizar relatório semanal.",
+      error: error.message,
+    });
+  }
+});
+
+app.delete("/excluirSemanal/:id", async (req, res) => {
+  try {
+    const semanal = await Semanal.findByIdAndDelete(req.params.id);
+
+    if (!semanal) {
+      return res
+        .status(404)
+        .json({ message: "Relatório semanal não encontrado." });
+    }
+
+    res
+      .status(200)
+      .json({ message: "Relatório semanal removido com sucesso." });
+  } catch (error) {
+    res.status(500).json({
+      message: "Erro ao remover relatório semanal.",
       error: error.message,
     });
   }
