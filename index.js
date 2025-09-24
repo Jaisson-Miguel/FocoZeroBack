@@ -297,17 +297,17 @@ app.post("/cadastrarQuarteirao", async (req, res) => {
     const novoQuarteirao = await Quarteirao.create({
       idArea,
       numero,
-        totalImoveis: 0,
-        totalImoveisTipo: {
-          r: 0,
-          c: 0,
-          tb: 0,
-          pe: 0,
-          out: 0
-        },
-        qtdHabitantes: 0,
-        qtdCachorros: 0,
-        qtdGatos: 0
+      totalImoveis: 0,
+      totalImoveisTipo: {
+        r: 0,
+        c: 0,
+        tb: 0,
+        pe: 0,
+        out: 0,
+      },
+      qtdHabitantes: 0,
+      qtdCachorros: 0,
+      qtdGatos: 0,
     });
 
     res.status(200).json({
@@ -421,10 +421,16 @@ app.post("/cadastrarImovel", async (req, res) => {
       observacao,
     } = req.body;
     console.log(posicao);
-    if (!idQuarteirao || !logradouro || !numero || !tipo) {
+    if (
+      !idQuarteirao ||
+      posicao === undefined ||
+      !logradouro ||
+      !numero ||
+      !tipo
+    ) {
       return res.status(400).json({
         message:
-          "Id do quarteirão, tipo de imóvel e endereço são obrigatórios.",
+          "Id do quarteirão, posição, tipo de imóvel e endereço são obrigatórios.",
       });
     }
 
@@ -432,6 +438,11 @@ app.post("/cadastrarImovel", async (req, res) => {
     if (!quarteiraoExistente) {
       return res.status(404).json({ message: "Quarteirão não encontrado." });
     }
+
+    await Imovel.updateMany(
+      { idQuarteirao, posicao: { $gte: posicao } },
+      { $inc: { posicao: 1 } }
+    );
 
     const novoImovel = await Imovel.create({
       idQuarteirao,
@@ -451,8 +462,8 @@ app.post("/cadastrarImovel", async (req, res) => {
         [`totalImoveisTipo.${tipo}`]: 1,
         qtdHabitantes: qtdHabitantes || 0,
         qtdCachorros: qtdCachorros || 0,
-        qtdGatos: qtdGatos || 0
-      }
+        qtdGatos: qtdGatos || 0,
+      },
     });
 
     res.status(200).json({
@@ -479,7 +490,7 @@ app.get("/listarImoveis/:idQuarteirao", async (req, res) => {
       return res.status(404).json({ message: "Quarteirão não encontrado." });
     }
 
-    const imoveis = await Imovel.find({ idQuarteirao });
+    const imoveis = await Imovel.find({ idQuarteirao }).sort({ posicao: 1 });
 
     if (!imoveis || imoveis.length === 0) {
       return res
