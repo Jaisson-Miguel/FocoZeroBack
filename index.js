@@ -285,8 +285,8 @@ app.post("/cadastrarQuarteirao", async (req, res) => {
     }
 
     const areaExiste = await Area.findById(idArea);
-    if(!areaExiste){
-      return res.status(404).json({message:"Área não encontrada."});
+    if (!areaExiste) {
+      return res.status(404).json({ message: "Área não encontrada." });
     }
 
     await Quarteirao.updateMany(
@@ -316,8 +316,8 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
     }
 
     const areaExiste = await Area.findById(idArea);
-    if(!areaExiste){
-      return res.status(404).json({message:"Área não encontrada."});
+    if (!areaExiste) {
+      return res.status(404).json({ message: "Área não encontrada." });
     }
 
     const quarteiroes = await Quarteirao.find({ idArea });
@@ -341,10 +341,10 @@ app.put("/editarQuarteirao/:id", async (req, res) => {
 
     let updateData = {};
     if (numero !== undefined) updateData.numero = numero;
-    if (idArea){
+    if (idArea) {
       const areaExiste = Area.findById(idArea);
-      if(!areaExiste){
-        res.status(404).json({message:"Área não encontrada."});
+      if (!areaExiste) {
+        res.status(404).json({ message: "Área não encontrada." });
       }
       updateData.idArea = idArea;
     }
@@ -397,6 +397,7 @@ app.post("/cadastrarImovel", async (req, res) => {
   try {
     const {
       idQuarteirao,
+      posicao,
       logradouro,
       numero,
       tipo,
@@ -404,9 +405,8 @@ app.post("/cadastrarImovel", async (req, res) => {
       qtdCachorros,
       qtdGatos,
       observacao,
-      status,
     } = req.body;
-
+    console.log(posicao);
     if (!idQuarteirao || !logradouro || !numero || !tipo) {
       return res.status(400).json({
         message:
@@ -415,12 +415,13 @@ app.post("/cadastrarImovel", async (req, res) => {
     }
 
     const quarteiraoExistente = await Quarteirao.findById(idQuarteirao);
-    if(!quarteiraoExistente){
-      return res.status(404).json({message:"Quarteirão não encontrado."});
+    if (!quarteiraoExistente) {
+      return res.status(404).json({ message: "Quarteirão não encontrado." });
     }
 
     const novoImovel = await Imovel.create({
       idQuarteirao,
+      posicao,
       logradouro,
       numero,
       tipo,
@@ -428,7 +429,6 @@ app.post("/cadastrarImovel", async (req, res) => {
       qtdCachorros: qtdCachorros || 0,
       qtdGatos: qtdGatos || 0,
       observacao: observacao || "Nenhuma observação.",
-      status: status || "fechado",
     });
 
     res.status(200).json({
@@ -452,7 +452,7 @@ app.get("/listarImoveis/:idQuarteirao", async (req, res) => {
 
     const quarteiraoExiste = await Quarteirao.findById(idQuarteirao);
     if (!quarteiraoExiste) {
-      return res.status(404).json({ message:"Quarteirão não encontrado." });
+      return res.status(404).json({ message: "Quarteirão não encontrado." });
     }
 
     const imoveis = await Imovel.find({ idQuarteirao });
@@ -486,8 +486,8 @@ app.put("/editarImovel/:id", async (req, res) => {
     } = req.body;
 
     const imovelExiste = await Imovel.findById(id);
-    if(!imovelExiste){
-      res.status(404).json({message:"Imóvel não encontrado."});
+    if (!imovelExiste) {
+      res.status(404).json({ message: "Imóvel não encontrado." });
     }
 
     const imovelAtualizado = await Imovel.findByIdAndUpdate(
@@ -521,8 +521,8 @@ app.delete("/excluirImovel/:id", async (req, res) => {
     const { id } = req.params;
 
     const imovelExiste = await Imovel.findById(id);
-    if(!imovelExiste){
-      res.status(404).json({message:"Imóvel não encontrado."});
+    if (!imovelExiste) {
+      res.status(404).json({ message: "Imóvel não encontrado." });
     }
 
     await Imovel.findByIdAndDelete(id);
@@ -559,17 +559,26 @@ app.post("/cadastrarVisita", async (req, res) => {
     }
 
     const imovelExiste = await Imovel.findById(idImovel);
-    if(!imovelExiste){
-      return res.status(404).json({message: "Imóvel não encontrado."});
+    if (!imovelExiste) {
+      return res.status(404).json({ message: "Imóvel não encontrado." });
     }
 
-    if(imovelExiste.status === "visitado"){
+    if (imovelExiste.status === "visitado") {
       return res.status(400).json({ message: "Este imóvel já foi visitado." });
     }
 
     const dataBruta = dataVisita ? new Date(dataVisita) : new Date();
 
-    const dataUTC = new Date(Date.UTC(dataBruta.getFullYear(), dataBruta.getMonth(), dataBruta.getDate(), 0, 0, 0));
+    const dataUTC = new Date(
+      Date.UTC(
+        dataBruta.getFullYear(),
+        dataBruta.getMonth(),
+        dataBruta.getDate(),
+        0,
+        0,
+        0
+      )
+    );
 
     const novaVisita = await Visita.create({
       idImovel,
@@ -603,49 +612,63 @@ app.get("/listarVisita", async (req, res) => {
     const { idAgente, data } = req.body;
 
     if (!idAgente || !data) {
-      return res.status(400).json({ message: "Preencha os campos obrigatórios."});
+      return res
+        .status(400)
+        .json({ message: "Preencha os campos obrigatórios." });
     }
 
     const inicio = new Date(data);
-    inicio.setHours(0,0,0,0);
+    inicio.setHours(0, 0, 0, 0);
     const fim = new Date(data);
-    fim.setHours(23,59,59,999);
+    fim.setHours(23, 59, 59, 999);
 
     const visitas = await Visita.find({
       idAgente,
-      dataVisita: { $gte: inicio, $lte: fim }
+      dataVisita: { $gte: inicio, $lte: fim },
     }).populate({
       path: "idImovel",
       populate: { path: "idQuarteirao" },
     });
 
-    const visitasArea = visitas.filter(v => {
+    const visitasArea = visitas.filter((v) => {
       const quarteirao = v.idImovel?.idQuarteirao;
       return quarteirao && quarteirao.idArea?.toString() === idArea;
     });
 
     if (!visitas.length) {
-      return res.status(404).json({ message: "Nenhuma visita encontrada para essa data e área." });
+      return res
+        .status(404)
+        .json({ message: "Nenhuma visita encontrada para essa data e área." });
     }
 
     const resumo = {
-      totalQuarteiroesTrabalhados: new Set(visitasArea.map(v => v.idImovel.idQuarteirao._id.toString())).size,
+      totalQuarteiroesTrabalhados: new Set(
+        visitasArea.map((v) => v.idImovel.idQuarteirao._id.toString())
+      ).size,
       totalVisitas: 0,
-      totalPorTipoImovel: { r:0, c:0, tb:0, pe:0, out:0 },
-      totalDepositosInspecionados: { a1:0, a2:0, b:0, c:0, d1:0, d2:0, e:0 },
+      totalPorTipoImovel: { r: 0, c: 0, tb: 0, pe: 0, out: 0 },
+      totalDepositosInspecionados: {
+        a1: 0,
+        a2: 0,
+        b: 0,
+        c: 0,
+        d1: 0,
+        d2: 0,
+        e: 0,
+      },
       totalImoveisLarvicida,
       totalDepEliminados: 0,
       imoveisComLarvicida: 0,
       totalLarvicidaAplicada: 0,
-      depositosTratadosComLarvicida: 0
+      depositosTratadosComLarvicida: 0,
     };
 
-    visitas.forEach(v => {
+    visitas.forEach((v) => {
       if (v.status === "visitado") {
         resumo.totalVisitas += 1;
         resumo.totalPorTipoImovel[v.tipo] += 1;
 
-        const depositos = v.depositosInspecionados.toObject(); 
+        const depositos = v.depositosInspecionados.toObject();
         for (let key in depositos) {
           resumo.totalDepositosInspecionados[key] += depositos[key];
         }
@@ -672,16 +695,17 @@ app.get("/listarVisita", async (req, res) => {
       semana,
       data: dataRef,
       atividade: atividade || 4,
-      resumo
+      resumo,
     });
 
     res.status(200).json({
       message: "Diário cadastrado com sucesso.",
-      diario
+      diario,
     });
-
   } catch (error) {
-    res.status(500).json({ message: "Erro ao cadastrar diário.", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Erro ao cadastrar diário.", error: error.message });
   }
 });
 
@@ -697,7 +721,7 @@ app.put("/editarVisita/:id", async (req, res) => {
       qtdLarvicida,
       qtdDepTratado,
       sincronizado,
-      status
+      status,
     } = req.body;
 
     const visitaExiste = await Visita.findById(id);
@@ -706,7 +730,16 @@ app.put("/editarVisita/:id", async (req, res) => {
     }
 
     const dataAtualizada = dataVisita
-      ? new Date(Date.UTC(new Date(dataVisita).getFullYear(), new Date(dataVisita).getMonth(), new Date(dataVisita).getDate(), 0, 0, 0))
+      ? new Date(
+          Date.UTC(
+            new Date(dataVisita).getFullYear(),
+            new Date(dataVisita).getMonth(),
+            new Date(dataVisita).getDate(),
+            0,
+            0,
+            0
+          )
+        )
       : visitaExiste.dataVisita;
 
     const visitaAtualizada = await Visita.findByIdAndUpdate(
@@ -720,48 +753,57 @@ app.put("/editarVisita/:id", async (req, res) => {
         qtdLarvicida,
         qtdDepTratado,
         sincronizado,
-        status
+        status,
       },
       { new: true }
     );
 
     res.status(200).json({
       message: "Visita editada com sucesso.",
-      visita: visitaAtualizada
+      visita: visitaAtualizada,
     });
-
   } catch (error) {
-    res.status(500).json({ message: "Erro ao editar visita.", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Erro ao editar visita.", error: error.message });
   }
 });
 
 app.delete("/excluirVisita", async (req, res) => {
   try {
-    const { idAgente, idImovel, data} = req.body;
+    const { idAgente, idImovel, data } = req.body;
 
     const inicio = new Date(data);
-    inicio.setHours(0,0,0,0);
+    inicio.setHours(0, 0, 0, 0);
     const fim = new Date(data);
-    fim.setHours(23,59,59,999);
+    fim.setHours(23, 59, 59, 999);
 
     if (!idAgente || !idImovel || !data) {
-      return res.status(400).json({ message: "Preencha os campos obrigatórios."});
+      return res
+        .status(400)
+        .json({ message: "Preencha os campos obrigatórios." });
     }
 
     const visitaRemovida = await Visita.findOneAndDelete({
       idAgente,
       idImovel,
-      dataVisita: { $gte: inicio, $lte: fim }
+      dataVisita: { $gte: inicio, $lte: fim },
     });
 
     if (!visitaRemovida) {
-      return res.status(404).json({ message: "Nenhuma visita encontrada para remover." });
+      return res
+        .status(404)
+        .json({ message: "Nenhuma visita encontrada para remover." });
     }
 
-    res.status(200).json({ message: "Visita removida com sucesso.", visita: visitaRemovida });
-
+    res.status(200).json({
+      message: "Visita removida com sucesso.",
+      visita: visitaRemovida,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Erro ao deletar visita.", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Erro ao deletar visita.", error: error.message });
   }
 });
 
@@ -771,7 +813,9 @@ app.post("/cadastrarDiario", async (req, res) => {
     const { idAgente, idArea, data, atividade } = req.body;
 
     if (!idAgente || !idArea || !data) {
-      return res.status(400).json({ message: "Preencha os campos obrigatórios." });
+      return res
+        .status(400)
+        .json({ message: "Preencha os campos obrigatórios." });
     }
 
     const dataRef = new Date(data);
@@ -783,20 +827,26 @@ app.post("/cadastrarDiario", async (req, res) => {
     let visitas = await Visita.find({
       idAgente,
       dataVisita: { $gte: inicioDia, $lte: fimDia },
-      status: "visitado"
+      status: "visitado",
     }).populate({
       path: "idImovel",
-      populate: { path: "idQuarteirao" }
+      populate: { path: "idQuarteirao" },
     });
 
-    visitas = visitas.filter(v => v.idImovel?.idQuarteirao?.idArea?.toString() === idArea);
+    visitas = visitas.filter(
+      (v) => v.idImovel?.idQuarteirao?.idArea?.toString() === idArea
+    );
 
     if (!visitas.length) {
-      return res.status(404).json({ message: "Nenhuma visita encontrada para essa data e área." });
+      return res
+        .status(404)
+        .json({ message: "Nenhuma visita encontrada para essa data e área." });
     }
 
     const resumo = {
-      totalQuarteiroesTrabalhados: new Set(visitas.map(v => v.idImovel.idQuarteirao.numero)).size,
+      totalQuarteiroesTrabalhados: new Set(
+        visitas.map((v) => v.idImovel.idQuarteirao.numero)
+      ).size,
       totalVisitas: visitas.length,
       totalVisitasTipo: { r: 0, c: 0, tb: 0, pe: 0, out: 0 },
       totalDepInspecionados: { a1: 0, a2: 0, b: 0, c: 0, d1: 0, d2: 0, e: 0 },
@@ -805,12 +855,12 @@ app.post("/cadastrarDiario", async (req, res) => {
       totalQtdLarvicida: 0,
       totalDepLarvicida: 0,
       imoveisComFoco: 0,
-      quarteiroesTrabalhados: ""
+      quarteiroesTrabalhados: "",
     };
 
     const quarteiroesSet = new Set();
 
-    visitas.forEach(v => {
+    visitas.forEach((v) => {
       resumo.totalVisitasTipo[v.tipo] += 1;
 
       for (let key in v.depositosInspecionados) {
@@ -834,7 +884,9 @@ app.post("/cadastrarDiario", async (req, res) => {
       }
     });
 
-    resumo.quarteiroesTrabalhados = Array.from(quarteiroesSet).sort((a, b) => a - b).join(", ");
+    resumo.quarteiroesTrabalhados = Array.from(quarteiroesSet)
+      .sort((a, b) => a - b)
+      .join(", ");
 
     const semana = numeroSemana(dataRef);
 
@@ -844,19 +896,19 @@ app.post("/cadastrarDiario", async (req, res) => {
       semana,
       data: dataRef,
       atividade: atividade || 4,
-      resumo
+      resumo,
     });
 
     res.status(200).json({
       message: "Diário cadastrado com sucesso.",
-      diario
+      diario,
     });
-
   } catch (error) {
-    res.status(500).json({ message: "Erro ao cadastrar diário.", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Erro ao cadastrar diário.", error: error.message });
   }
 });
-
 
 app.get("/listarDiario/:idAgente/:idArea/:semana", async (req, res) => {
   try {
@@ -865,29 +917,27 @@ app.get("/listarDiario/:idAgente/:idArea/:semana", async (req, res) => {
     const diario = await Diario.findOne({
       idAgente,
       idArea,
-      semana: parseInt(semana, 10)
+      semana: parseInt(semana, 10),
     });
 
     if (!diario) {
-      return res.status(404).json({ message: "Diário não encontrado para essa semana." });
+      return res
+        .status(404)
+        .json({ message: "Diário não encontrado para essa semana." });
     }
 
     res.json(diario);
   } catch (error) {
-    res.status(500).json({message:"Erro ao listar diário.", error: error.message});
+    res
+      .status(500)
+      .json({ message: "Erro ao listar diário.", error: error.message });
   }
 });
 
 app.put("/editarDiario/:id", async (req, res) => {
   try {
-    const {id} = req.params;
-    const {
-      semana,
-      data,
-      visita,
-      visitas: visitasArea,
-      resumo
-    } = req.body;
+    const { id } = req.params;
+    const { semana, data, visita, visitas: visitasArea, resumo } = req.body;
 
     const diarioExiste = await Diario.findById(id);
     if (!diarioExiste) {
@@ -895,7 +945,16 @@ app.put("/editarDiario/:id", async (req, res) => {
     }
 
     const dataAtualizada = data
-      ? new Date(Date.UTC(new Date(data).getFullYear(), new Date(data).getMonth(), new Date(data).getDate(), 0, 0, 0))
+      ? new Date(
+          Date.UTC(
+            new Date(data).getFullYear(),
+            new Date(data).getMonth(),
+            new Date(data).getDate(),
+            0,
+            0,
+            0
+          )
+        )
       : diarioExiste.data;
 
     const diarioAtualizado = await Diario.findByIdAndUpdate(
@@ -904,17 +963,20 @@ app.put("/editarDiario/:id", async (req, res) => {
         semana,
         data: dataAtualizada,
         atividade,
-        resumo
+        resumo,
       },
       { new: true }
     );
 
     res.status(200).json({
       message: "Diário editado com sucesso.",
-      diario: diarioAtualizado
-    }); 
+      diario: diarioAtualizado,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Erro ao gerar relatório diário.", error: error.message });
+    res.status(500).json({
+      message: "Erro ao gerar relatório diário.",
+      error: error.message,
+    });
   }
 });
 
@@ -923,7 +985,9 @@ app.delete("/excluirDiario/:id", async (req, res) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ message: "Preencha os campos obrigatórios." });
+      return res
+        .status(400)
+        .json({ message: "Preencha os campos obrigatórios." });
     }
 
     const diarioRemovido = await Diario.findByIdAndDelete(id);
@@ -932,10 +996,14 @@ app.delete("/excluirDiario/:id", async (req, res) => {
       return res.status(404).json({ message: "Diário não encontrado." });
     }
 
-    res.status(200).json({ message: "Diário removido com sucesso.", diario: diarioRemovido });
-
+    res.status(200).json({
+      message: "Diário removido com sucesso.",
+      diario: diarioRemovido,
+    });
   } catch (error) {
-    res.status(500).json({message:"Erro ao excluir diário.", error:error.message});
+    res
+      .status(500)
+      .json({ message: "Erro ao excluir diário.", error: error.message });
   }
 });
 
@@ -945,24 +1013,28 @@ app.post("/cadastrarSemanal", async (req, res) => {
     const { idAgente, idArea, semana, atividade } = req.body;
 
     if (!idAgente || !idArea || !semana) {
-      return res.status(400).json({ message: "Preencha os campos obrigatórios." });
+      return res
+        .status(400)
+        .json({ message: "Preencha os campos obrigatórios." });
     }
 
     const diarios = await Diario.find({
       idAgente,
       idArea,
-      semana
+      semana,
     });
 
     if (!diarios.length) {
-      return res.status(404).json({ message: "Nenhum diário encontrado para essa semana e área." });
+      return res
+        .status(404)
+        .json({ message: "Nenhum diário encontrado para essa semana e área." });
     }
 
     const resumo = {
       totalQuarteiroesTrabalhados: 0,
       totalVisitas: 0,
-      totalVisitasTipo: { r:0, c:0, tb:0, pe:0, out:0 },
-      totalDepInspecionados: { a1:0, a2:0, b:0, c:0, d1:0, d2:0, e:0 },
+      totalVisitasTipo: { r: 0, c: 0, tb: 0, pe: 0, out: 0 },
+      totalDepInspecionados: { a1: 0, a2: 0, b: 0, c: 0, d1: 0, d2: 0, e: 0 },
       totalDepEliminados: 0,
       totalImoveisLarvicida: 0,
       totalQtdLarvicida: 0,
@@ -973,8 +1045,9 @@ app.post("/cadastrarSemanal", async (req, res) => {
     const quarteiroesSet = new Set();
     const diasSet = new Set();
 
-    diarios.forEach(d => {
-      resumo.totalQuarteiroesTrabalhados += d.resumo.totalQuarteiroesTrabalhados;
+    diarios.forEach((d) => {
+      resumo.totalQuarteiroesTrabalhados +=
+        d.resumo.totalQuarteiroesTrabalhados;
       resumo.totalVisitas += d.resumo.totalVisitas;
 
       for (let key in resumo.totalVisitasTipo) {
@@ -982,7 +1055,8 @@ app.post("/cadastrarSemanal", async (req, res) => {
       }
 
       for (let key in resumo.totalDepInspecionados) {
-        resumo.totalDepInspecionados[key] += d.resumo.totalDepInspecionados[key] || 0;
+        resumo.totalDepInspecionados[key] +=
+          d.resumo.totalDepInspecionados[key] || 0;
       }
 
       resumo.totalDepEliminados += d.resumo.totalDepEliminados;
@@ -992,13 +1066,17 @@ app.post("/cadastrarSemanal", async (req, res) => {
       resumo.imoveisComFoco += d.resumo.imoveisComFoco;
 
       if (d.resumo.quarteiroesTrabalhados) {
-        d.resumo.quarteiroesTrabalhados.split(",").forEach(q => quarteiroesSet.add(q.trim()));
+        d.resumo.quarteiroesTrabalhados
+          .split(",")
+          .forEach((q) => quarteiroesSet.add(q.trim()));
       }
 
-      diasSet.add(d.data.toISOString().slice(0,10));
+      diasSet.add(d.data.toISOString().slice(0, 10));
     });
 
-    resumo.quarteiroesTrabalhados = Array.from(quarteiroesSet).sort().join(", ");
+    resumo.quarteiroesTrabalhados = Array.from(quarteiroesSet)
+      .sort()
+      .join(", ");
     const qtdDiasTrabalhados = diasSet.size;
 
     const semanal = await Semanal.create({
@@ -1008,21 +1086,20 @@ app.post("/cadastrarSemanal", async (req, res) => {
       atividade: atividade || 4,
       quarteiroesTrabalhados: resumo.quarteiroesTrabalhados,
       qtdDiasTrabalhados,
-      resumo
+      resumo,
     });
 
     res.status(200).json({
       message: "Relatório semanal cadastrado com sucesso.",
-      semanal
+      semanal,
     });
-
   } catch (error) {
-    res.status(500).json({ message: "Erro ao cadastrar relatório semanal.", error: error.message });
+    res.status(500).json({
+      message: "Erro ao cadastrar relatório semanal.",
+      error: error.message,
+    });
   }
 });
-
-
-
 
 function numeroSemana(d) {
   const data = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -1032,17 +1109,17 @@ function numeroSemana(d) {
   return Math.ceil(((data - ano1) / 86400000 + 1) / 7);
 }
 
-function areaExiste(id){
+function areaExiste(id) {
   const resposta = Area.findById(id);
   return resposta;
 }
 
-function quarteiraoExiste(id){
+function quarteiraoExiste(id) {
   const resposta = Quarteirao.findById(id);
   return resposta;
 }
 
-function imovelExiste(id){
+function imovelExiste(id) {
   const resposta = Imovel.findById(id);
   return resposta;
 }

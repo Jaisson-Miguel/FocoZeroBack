@@ -8,6 +8,10 @@ const imovelModel = new Schema({
     ref: "Quarteirao",
     required: true,
   },
+  posicao: {
+    type: Number,
+    required: true,
+  },
   logradouro: {
     type: String,
     required: true,
@@ -16,32 +20,32 @@ const imovelModel = new Schema({
     type: String,
     required: true,
   },
-  tipo:{
+  tipo: {
     type: String,
-    enum:["r", "c", "tb", "pe", "out"],
-    required:true
+    enum: ["r", "c", "tb", "pe", "out"],
+    required: true,
   },
-  qtdHabitantes:{
+  qtdHabitantes: {
     type: Number,
     default: 0,
   },
-  qtdCachorros:{
+  qtdCachorros: {
     type: Number,
     default: 0,
   },
-  qtdGatos:{
+  qtdGatos: {
     type: Number,
     default: 0,
   },
-  observacao:{
+  observacao: {
     type: String,
-    default: "Nenhuma observação."
+    default: "Nenhuma observação.",
   },
   status: {
     type: String,
     enum: ["visitado", "recusa", "fechado"],
     default: "fechado",
-  }
+  },
 });
 
 export default model("Imovel", imovelModel);
