@@ -684,6 +684,89 @@ app.get("/listarVisita", async (req, res) => {
   }
 });
 
+// DIÁRIO
+app.post("/cadastrarDiario", async (req, res) => {
+  try {
+    const { idAgente, idArea, data, atividade } = req.body;
+
+    if (!idAgente || !idArea || !data) {
+      return res.status(400).json({ message: "Preencha os campos obrigatórios." });
+    }
+
+    const dataRef = new Date(data);
+    dataRef.setHours(0, 0, 0, 0);
+    const inicioDia = new Date(dataRef);
+    const fimDia = new Date(dataRef);
+    fimDia.setHours(23, 59, 59, 999);
+
+    let visitas = await Visita.find({
+      idAgente,
+      dataVisita: { $gte: inicioDia, $lte: fimDia },
+      status: "visitado"
+    }).populate({
+      path: "idImovel",
+      populate: { path: "idQuarteirao" }
+    });
+
+    visitas = visitas.filter(v => v.idImovel.idQuarteirao.idArea.toString() === idArea);
+
+    if (!visitas.length) {
+      return res.status(404).json({ message: "Nenhuma visita encontrada para essa data e área." });
+    }
+
+    const resumo = {
+      totalQuarteiroesTrabalhados: new Set(visitas.map(v => v.idImovel.idQuarteirao._id.toString())).size,
+      totalVisitas: visitas.length,
+      totalVisitasTipo: { r:0, c:0, tb:0, pe:0, out:0 },
+      totalDepInspecionados: { a1:0, a2:0, b:0, c:0, d1:0, d2:0, e:0 },
+      totalDepEliminados: 0,
+      totalImoveisLarvicida: 0,
+      totalQtdLarvicida: 0,
+      totalDepLarvicida: 0,
+      imoveisComFoco: 0,
+    };
+
+    visitas.forEach(v => {
+      resumo.totalVisitasTipo[v.tipo] += 1;
+
+      for (let key in v.depositosInspecionados) {
+        resumo.totalDepInspecionados[key] += v.depositosInspecionados[key];
+      }
+
+      resumo.totalDepEliminados += v.qtdDepEliminado;
+
+      if (v.qtdLarvicida > 0) {
+        resumo.totalImoveisLarvicida += 1;
+        resumo.totalQtdLarvicida += v.qtdLarvicida;
+        resumo.totalDepLarvicida += v.qtdDepTratado;
+      }
+
+      if (v.foco) {
+      resumo.imoveisComFoco += 1;
+      }
+    });
+
+    const semana = numeroSemana(dataRef);
+
+    const diario = await Diario.create({
+      idAgente,
+      idArea,
+      semana,
+      data: dataRef,
+      atividade: atividade || 4,
+      resumo
+    });
+
+    res.status(200).json({
+      message: "Diário cadastrado com sucesso.",
+      diario
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: "Erro ao cadastrar diário.", error: error.message });
+  }
+});
+
 app.get("/listarDiario/:idAgente/:idArea/:semana", async (req, res) => {
   try {
     const { idAgente, idArea, semana } = req.params;
@@ -743,6 +826,7 @@ app.put("/editarDiario/:id", async (req, res) => {
     res.status(500).json({ message: "Erro ao gerar relatório diário.", error: error.message });
   }
 });
+
 
 function numeroSemana(d) {
   const data = new Date(d.getFullYear(), d.getMonth(), d.getDate());
