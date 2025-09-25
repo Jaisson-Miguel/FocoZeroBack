@@ -56,7 +56,12 @@ app.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { cpf: usuario.cpf, nome: usuario.nome, funcao: usuario.funcao },
+      {
+        id: usuario._id,
+        cpf: usuario.cpf,
+        nome: usuario.nome,
+        funcao: usuario.funcao,
+      },
       SECRET_KEY,
       { expiresIn: "1h" }
     );
