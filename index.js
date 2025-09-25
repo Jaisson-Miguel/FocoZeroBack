@@ -56,7 +56,12 @@ app.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { cpf: usuario.cpf, nome: usuario.nome, funcao: usuario.funcao },
+      {
+        id: usuario._id,
+        cpf: usuario.cpf,
+        nome: usuario.nome,
+        funcao: usuario.funcao,
+      },
       SECRET_KEY,
       { expiresIn: "1h" }
     );
@@ -297,17 +302,17 @@ app.post("/cadastrarQuarteirao", async (req, res) => {
     const novoQuarteirao = await Quarteirao.create({
       idArea,
       numero,
-        totalImoveis: 0,
-        totalImoveisTipo: {
-          r: 0,
-          c: 0,
-          tb: 0,
-          pe: 0,
-          out: 0
-        },
-        qtdHabitantes: 0,
-        qtdCachorros: 0,
-        qtdGatos: 0
+      totalImoveis: 0,
+      totalImoveisTipo: {
+        r: 0,
+        c: 0,
+        tb: 0,
+        pe: 0,
+        out: 0,
+      },
+      qtdHabitantes: 0,
+      qtdCachorros: 0,
+      qtdGatos: 0,
     });
 
     res.status(200).json({
@@ -420,10 +425,17 @@ app.post("/cadastrarImovel", async (req, res) => {
       qtdGatos,
       observacao,
     } = req.body;
-    if (!idQuarteirao || !logradouro || !numero || !tipo) {
+    console.log(posicao);
+    if (
+      !idQuarteirao ||
+      posicao === undefined ||
+      !logradouro ||
+      !numero ||
+      !tipo
+    ) {
       return res.status(400).json({
         message:
-          "Id do quarteirão, tipo de imóvel e endereço são obrigatórios.",
+          "Id do quarteirão, posição, tipo de imóvel e endereço são obrigatórios.",
       });
     }
 
@@ -431,6 +443,11 @@ app.post("/cadastrarImovel", async (req, res) => {
     if (!quarteiraoExistente) {
       return res.status(404).json({ message: "Quarteirão não encontrado." });
     }
+
+    await Imovel.updateMany(
+      { idQuarteirao, posicao: { $gte: posicao } },
+      { $inc: { posicao: 1 } }
+    );
 
     const novoImovel = await Imovel.create({
       idQuarteirao,
@@ -450,8 +467,8 @@ app.post("/cadastrarImovel", async (req, res) => {
         [`totalImoveisTipo.${tipo}`]: 1,
         qtdHabitantes: qtdHabitantes || 0,
         qtdCachorros: qtdCachorros || 0,
-        qtdGatos: qtdGatos || 0
-      }
+        qtdGatos: qtdGatos || 0,
+      },
     });
 
     res.status(200).json({
@@ -478,7 +495,7 @@ app.get("/listarImoveis/:idQuarteirao", async (req, res) => {
       return res.status(404).json({ message: "Quarteirão não encontrado." });
     }
 
-    const imoveis = await Imovel.find({ idQuarteirao });
+    const imoveis = await Imovel.find({ idQuarteirao }).sort({ posicao: 1 });
 
     if (!imoveis || imoveis.length === 0) {
       return res
@@ -527,28 +544,6 @@ app.put("/editarImovel/:id", async (req, res) => {
       },
       { new: true }
     );
-
-        const quarteirao = await Quarteirao.findById(imovelAntigo.idQuarteirao);
-    if (quarteirao) {
-      if (imovelAntigo.tipo !== imovelAtualizado.tipo) {
-        quarteirao.totalImoveisTipo[imovelAntigo.tipo] = (quarteirao.totalImoveisTipo[imovelAntigo.tipo] || 0) - 1;
-        quarteirao.totalImoveisTipo[imovelAtualizado.tipo] = (quarteirao.totalImoveisTipo[imovelAtualizado.tipo] || 0) + 1;
-      }
-
-      if (imovelAntigo.qtdHabitantes !== imovelAtualizado.qtdHabitantes) {
-        quarteirao.qtdHabitantes += (imovelAtualizado.qtdHabitantes || 0) - (imovelAntigo.qtdHabitantes || 0);
-      }
-
-      if (imovelAntigo.qtdCachorros !== imovelAtualizado.qtdCachorros) {
-        quarteirao.qtdCachorros += (imovelAtualizado.qtdCachorros || 0) - (imovelAntigo.qtdCachorros || 0);
-      }
-
-      if (imovelAntigo.qtdGatos !== imovelAtualizado.qtdGatos) {
-        quarteirao.qtdGatos += (imovelAtualizado.qtdGatos || 0) - (imovelAntigo.qtdGatos || 0);
-      }
-
-      await quarteirao.save();
-    };
 
     res.status(200).json({
       message: "Imóvel editado com sucesso.",
@@ -964,29 +959,23 @@ app.post("/listarDiario", async (req, res) => {
     if (idArea) filtro.idArea = idArea;
     if (semana) filtro.semana = semana;
 
-    const diarios = await Diario.find(filtro);
-
-    if (!diarios.length) {
-      return res.status(404).json({ message: "Nenhum relatório diário encontrado." });
-    }
-
-    res.status(200).json(diarios);
-  } catch (error) {
-    res.status(500).json({message: "Erro ao buscar relatórios diários.", error: error.message});
-  }
-});
-
-app.get("/listarDiario/:id", async (req, res) => {
-  try {
-    const diario = await Diario.findById(req.params.id);
+    const diario = await Diario.findOne({
+      idAgente,
+      idArea,
+      semana: parseInt(semana, 10),
+    });
 
     if (!diario) {
-      return res.status(404).json({ message: "Relatório diario não encontrado." });
+      return res
+        .status(404)
+        .json({ message: "Diário não encontrado para essa semana." });
     }
 
     res.status(200).json(diario);
   } catch (error) {
-    res.status(500).json({message: "Erro ao buscar relatório diario.", error: error.message});
+    res
+      .status(500)
+      .json({ message: "Erro ao listar diário.", error: error.message });
   }
 });
 
@@ -1169,12 +1158,17 @@ app.post("/listarSemanal", async (req, res) => {
     const semanais = await Semanal.find(filtro);
 
     if (!semanais.length) {
-      return res.status(404).json({ message: "Nenhum relatório semanal encontrado." });
+      return res
+        .status(404)
+        .json({ message: "Nenhum relatório semanal encontrado." });
     }
 
     res.status(200).json(semanais);
   } catch (error) {
-    res.status(500).json({message: "Erro ao buscar relatórios semanais.", error: error.message});
+    res.status(500).json({
+      message: "Erro ao buscar relatórios semanais.",
+      error: error.message,
+    });
   }
 });
 
@@ -1183,18 +1177,24 @@ app.get("/listarSemanal/:id", async (req, res) => {
     const semanal = await Semanal.findById(req.params.id);
 
     if (!semanal) {
-      return res.status(404).json({ message: "Relatório semanal não encontrado." });
+      return res
+        .status(404)
+        .json({ message: "Relatório semanal não encontrado." });
     }
 
     res.status(200).json(semanal);
   } catch (error) {
-    res.status(500).json({message: "Erro ao buscar relatório semanal.", error: error.message});
+    res.status(500).json({
+      message: "Erro ao buscar relatório semanal.",
+      error: error.message,
+    });
   }
 });
 
 app.put("/editarSemanal/:id", async (req, res) => {
   try {
-    const { atividade, quarteiroesTrabalhados, qtdDiasTrabalhados, resumo } = req.body;
+    const { atividade, quarteiroesTrabalhados, qtdDiasTrabalhados, resumo } =
+      req.body;
 
     const semanal = await Semanal.findByIdAndUpdate(
       req.params.id,
@@ -1203,7 +1203,9 @@ app.put("/editarSemanal/:id", async (req, res) => {
     );
 
     if (!semanal) {
-      return res.status(404).json({ message: "Relatório semanal não encontrado." });
+      return res
+        .status(404)
+        .json({ message: "Relatório semanal não encontrado." });
     }
 
     res.status(200).json({
@@ -1211,7 +1213,10 @@ app.put("/editarSemanal/:id", async (req, res) => {
       semanal,
     });
   } catch (error) {
-    res.status(500).json({message: "Erro ao atualizar relatório semanal.", error: error.message});
+    res.status(500).json({
+      message: "Erro ao atualizar relatório semanal.",
+      error: error.message,
+    });
   }
 });
 
@@ -1220,12 +1225,19 @@ app.delete("/excluirSemanal/:id", async (req, res) => {
     const semanal = await Semanal.findByIdAndDelete(req.params.id);
 
     if (!semanal) {
-      return res.status(404).json({ message: "Relatório semanal não encontrado." });
+      return res
+        .status(404)
+        .json({ message: "Relatório semanal não encontrado." });
     }
 
-    res.status(200).json({ message: "Relatório semanal removido com sucesso." });
+    res
+      .status(200)
+      .json({ message: "Relatório semanal removido com sucesso." });
   } catch (error) {
-    res.status(500).json({message: "Erro ao remover relatório semanal.", error: error.message});
+    res.status(500).json({
+      message: "Erro ao remover relatório semanal.",
+      error: error.message,
+    });
   }
 });
 
