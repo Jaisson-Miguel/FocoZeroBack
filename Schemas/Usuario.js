@@ -16,7 +16,7 @@ const usuarioModel = new Schema({
     },
     funcao:{
         type:String,
-        required:true,
+        enum: ["agente", "adm", "fiscal"],
         default:"agente"
     },
 });

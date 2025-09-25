@@ -955,9 +955,9 @@ app.post("/cadastrarDiario", async (req, res) => {
   }
 });
 
-app.get("/listarDiario", async (req, res) => {
+app.post("/listarDiario", async (req, res) => {
   try {
-    const { idAgente, idArea, semana } = req.query;
+    const { idAgente, idArea, semana } = req.body;
     const filtro = {};
 
     if (idAgente) filtro.idAgente = idAgente;
@@ -1157,9 +1157,9 @@ app.post("/cadastrarSemanal", async (req, res) => {
   }
 });
 
-app.get("/listarSemanal", async (req, res) => {
+app.post("/listarSemanal", async (req, res) => {
   try {
-    const { idAgente, idArea, semana } = req.query;
+    const { idAgente, idArea, semana } = req.body;
     const filtro = {};
 
     if (idAgente) filtro.idAgente = idAgente;
@@ -1226,6 +1226,34 @@ app.delete("/excluirSemanal/:id", async (req, res) => {
     res.status(200).json({ message: "Relatório semanal removido com sucesso." });
   } catch (error) {
     res.status(500).json({message: "Erro ao remover relatório semanal.", error: error.message});
+  }
+});
+
+// RESETAR
+app.post("/resetarCiclo/:id", async (req, res) => {
+  try {
+    const {id} = req.params;
+    const usuario = await Usuario.findById(id);
+
+    if (!usuario) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    if(usuario.funcao !== "adm"){
+      return res.status(403).json({message:"Seu usuário não tem acesso a essa função."});
+    }
+
+    const resultado = await Imovel.updateMany(
+      { status: "visitado" },  
+      { status: "fechado" }
+    );
+    res.status(200).json({
+      message: "Ciclo resetado com sucesso. Todos os imóveis foram fechados.",
+      totalAtualizados: resultado.modifiedCount,
+    });
+
+  } catch (error) {
+    res.status(500).json({message:"Não foi possível resetar o ciclo.", error:error.message});
   }
 });
 
