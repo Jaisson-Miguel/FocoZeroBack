@@ -62,8 +62,8 @@ app.post("/login", async (req, res) => {
         nome: usuario.nome,
         funcao: usuario.funcao,
       },
-      SECRET_KEY,
-      { expiresIn: "1h" }
+      SECRET_KEY
+      // { expiresIn: "1h" }
     );
 
     res.status(200).json({
