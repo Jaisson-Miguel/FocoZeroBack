@@ -117,7 +117,15 @@ app.post("/cadastrarUsuario", async (req, res) => {
 
 app.get("/listarUsuarios", async (req, res) => {
   try {
-    const usuarios = await Usuario.find();
+    const {funcao} = req.query;
+    let usuarios;
+    
+    if(funcao){
+      usuarios = await Usuario.find({funcao});
+    }
+    else{
+      usuarios = await Usuario.find();
+    }
 
     if (!usuarios || usuarios.length === 0) {
       return res.status(404).json({ message: "Usuários não encontrado.s" });
@@ -127,7 +135,7 @@ app.get("/listarUsuarios", async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: "Erro ao listar usuários", erorr: erorr.message });
+      .json({ message: "Erro ao listar usuários", error: error.message });
   }
 });
 
