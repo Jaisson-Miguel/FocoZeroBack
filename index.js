@@ -117,18 +117,18 @@ app.post("/cadastrarUsuario", async (req, res) => {
 
 app.get("/listarUsuarios", async (req, res) => {
   try {
-    const {funcao} = req.query;
+    const { funcao } = req.query;
     let usuarios;
-    
-    if(funcao){
-      usuarios = await Usuario.find({funcao});
-    }
-    else{
+    console.log(funcao);
+
+    if (funcao) {
+      usuarios = await Usuario.find({ funcao });
+    } else {
       usuarios = await Usuario.find();
     }
 
     if (!usuarios || usuarios.length === 0) {
-      return res.status(404).json({ message: "Usuários não encontrado.s" });
+      return res.status(404).json({ message: "Usuários não encontrados" });
     }
 
     res.json(usuarios);
@@ -1252,28 +1252,32 @@ app.delete("/excluirSemanal/:id", async (req, res) => {
 // RESETAR
 app.post("/resetarCiclo/:id", async (req, res) => {
   try {
-    const {id} = req.params;
+    const { id } = req.params;
     const usuario = await Usuario.findById(id);
 
     if (!usuario) {
       return res.status(404).json({ message: "Usuário não encontrado." });
     }
 
-    if(usuario.funcao !== "adm"){
-      return res.status(403).json({message:"Seu usuário não tem acesso a essa função."});
+    if (usuario.funcao !== "adm") {
+      return res
+        .status(403)
+        .json({ message: "Seu usuário não tem acesso a essa função." });
     }
 
     const resultado = await Imovel.updateMany(
-      { status: "visitado" },  
+      { status: "visitado" },
       { status: "fechado" }
     );
     res.status(200).json({
       message: "Ciclo resetado com sucesso. Todos os imóveis foram fechados.",
       totalAtualizados: resultado.modifiedCount,
     });
-
   } catch (error) {
-    res.status(500).json({message:"Não foi possível resetar o ciclo.", error:error.message});
+    res.status(500).json({
+      message: "Não foi possível resetar o ciclo.",
+      error: error.message,
+    });
   }
 });
 
