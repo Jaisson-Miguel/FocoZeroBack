@@ -596,7 +596,6 @@ app.post("/cadastrarVisita", async (req, res) => {
       foco,
       qtdLarvicida,
       qtdDepTratado,
-      sincronizado,
       status,
     } = req.body;
 
@@ -638,7 +637,6 @@ app.post("/cadastrarVisita", async (req, res) => {
       foco,
       qtdLarvicida,
       qtdDepTratado,
-      sincronizado,
       status,
     });
 

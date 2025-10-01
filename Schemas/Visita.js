@@ -13,14 +13,14 @@ const visitaModel = new Schema({
     ref: "Usuario",
     required: true,
   },
-  tipo:{
+  tipo: {
     type: String,
-    enum: ["r", "c", "tb", "out","pe"],
+    enum: ["r", "c", "tb", "out", "pe"],
     required: true,
   },
-  dataVisita:{
+  dataVisita: {
     type: Date,
-    default: Date.now
+    default: Date.now,
   },
   depositosInspecionados: {
     a1: { type: Number, default: 0 },
@@ -31,40 +31,35 @@ const visitaModel = new Schema({
     d2: { type: Number, default: 0 },
     e: { type: Number, default: 0 },
   },
-  qtdDepEliminado:{
-    type: Number,
-    default: 0
-  },
-  amostraInicial:{
-    type: Number,
-    default: 0
-  },
-  amostraFinal:{
-    type: Number,
-    default: 0
-  },
-  foco:{
-    type: Boolean,
-    default: false,
-  },
-  qtdLarvicida:{
+  qtdDepEliminado: {
     type: Number,
     default: 0,
   },
-  qtdDepTratado:{
+  amostraInicial: {
     type: Number,
-    default: 0
+    default: 0,
   },
-  sincronizado:{
-    type: String,
-    enum:["pendente", "sincronizado"],
-    default: "pendente",
+  amostraFinal: {
+    type: Number,
+    default: 0,
+  },
+  foco: {
+    type: Boolean,
+    default: false,
+  },
+  qtdLarvicida: {
+    type: Number,
+    default: 0,
+  },
+  qtdDepTratado: {
+    type: Number,
+    default: 0,
   },
   status: {
     type: String,
     enum: ["visitado", "recusa", "fechado"],
     default: "fechado",
-  }
+  },
 });
 
 export default model("Visita", visitaModel);
