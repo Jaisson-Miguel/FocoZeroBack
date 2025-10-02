@@ -13,17 +13,17 @@ const quarteiraoModel = new Schema({
     required: true,
   },
   totalImoveisTipo: {
-      r: { type: Number, default: 0 },
-      c: { type: Number, default: 0 },
-      tb: { type: Number, default: 0 },
-      pe: { type: Number, default: 0 },
-      out: { type: Number, default: 0 }
-    },
-  totalImoveis:{
-    type: Number,
-    default: 0
+    r: { type: Number, default: 0 },
+    c: { type: Number, default: 0 },
+    tb: { type: Number, default: 0 },
+    pe: { type: Number, default: 0 },
+    out: { type: Number, default: 0 },
   },
-    qtdHabitantes: {
+  totalImoveis: {
+    type: Number,
+    default: 0,
+  },
+  qtdHabitantes: {
     type: Number,
     default: 0,
   },
@@ -34,6 +34,11 @@ const quarteiraoModel = new Schema({
   qtdGatos: {
     type: Number,
     default: 0,
+  },
+  idResponsavel: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Usuario",
+    default: null,
   },
 });
 

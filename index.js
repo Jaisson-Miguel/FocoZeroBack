@@ -397,6 +397,56 @@ app.put("/editarQuarteirao/:id", async (req, res) => {
   }
 });
 
+app.post("/atribuirQuarteiroes", async (req, res) => {
+  try {
+    const { idAgente, quarteiroes } = req.body;
+
+    // validações
+    if (!idAgente) {
+      return res.status(400).json({ message: "ID do agente é obrigatório." });
+    }
+    if (
+      !quarteiroes ||
+      !Array.isArray(quarteiroes) ||
+      quarteiroes.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Lista de quarteirões é obrigatória." });
+    }
+
+    // checar se os IDs são válidos
+    const invalidIds = quarteiroes.filter(
+      (id) => !mongoose.Types.ObjectId.isValid(id)
+    );
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        message: "Alguns IDs de quarteirão são inválidos.",
+        invalidIds,
+      });
+    }
+
+    // atualizar os quarteirões
+    const resultados = await Promise.all(
+      quarteiroes.map(async (id) => {
+        const q = await Quarteirao.findById(id);
+        if (!q) return null;
+        q.idResponsavel = idAgente;
+        return await q.save();
+      })
+    );
+
+    res.json({
+      message: "Quarteirões atribuídos com sucesso.",
+      quarteiroes: resultados.filter((r) => r !== null),
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Erro ao atribuir quarteirões", error: error.message });
+  }
+});
+
 app.delete("/excluirQuarteirao/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -453,13 +503,13 @@ app.post("/cadastrarImovel", async (req, res) => {
     }
 
     await Imovel.updateMany(
-      { idQuarteirao, posicao: { $gte: posicao } },
+      { idQuarteirao, posicao: { $gt: posicao } },
       { $inc: { posicao: 1 } }
     );
 
     const novoImovel = await Imovel.create({
       idQuarteirao,
-      posicao,
+      posicao: posicao + 1,
       logradouro,
       numero,
       tipo,
