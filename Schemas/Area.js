@@ -9,20 +9,25 @@ const areaModel = new Schema({
   },
   codigo: {
     type: Number,
-    required: true
+    required: true,
   },
-  zona:{
+  zona: {
     type: Number,
-    required: true
+    required: true,
   },
-  categoria:{
+  categoria: {
     type: String,
     required: true,
   },
   mapaUrl: {
     type: String,
     required: true,
-  }
+  },
+  idResponsavel: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Usuario",
+    default: null,
+  },
 });
 
 export default model("Area", areaModel);

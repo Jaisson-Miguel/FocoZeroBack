@@ -189,7 +189,7 @@ app.delete("/excluirUsuario/:id", async (req, res) => {
 // AREA
 app.post("/cadastrarArea", async (req, res) => {
   try {
-    const { nome, codigo, zona, categoria, mapaUrl } = req.body;
+    const { nome, codigo, zona, categoria, mapaUrl, idResponsavel } = req.body;
 
     if (!nome || !codigo || !zona || !categoria || !mapaUrl) {
       return res.status(400).json({ message: "Os campos são obrigatórios." });
@@ -201,6 +201,7 @@ app.post("/cadastrarArea", async (req, res) => {
       zona,
       categoria,
       mapaUrl,
+      idResponsavel,
     });
 
     res.status(201).json({
@@ -444,6 +445,28 @@ app.post("/atribuirQuarteiroes", async (req, res) => {
     res
       .status(500)
       .json({ message: "Erro ao atribuir quarteirões", error: error.message });
+  }
+});
+
+// Resetar todos os responsáveis
+app.post("/resetarResponsaveis", async (req, res) => {
+  try {
+    // Atualiza todos os quarteirões que têm idResponsavel definido
+    const resultado = await Quarteirao.updateMany(
+      { idResponsavel: { $exists: true, $ne: null } },
+      { $unset: { idResponsavel: "" } } // remove o campo
+    );
+
+    res.status(200).json({
+      message: "Todos os responsáveis foram resetados.",
+      quarteiroesAtualizados: resultado.modifiedCount,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Erro ao resetar responsáveis.",
+      error: error.message,
+    });
   }
 });
 
