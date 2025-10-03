@@ -506,7 +506,6 @@ app.post("/cadastrarImovel", async (req, res) => {
       qtdGatos,
       observacao,
     } = req.body;
-    console.log(posicao);
     if (
       !idQuarteirao ||
       posicao === undefined ||
@@ -526,13 +525,13 @@ app.post("/cadastrarImovel", async (req, res) => {
     }
 
     await Imovel.updateMany(
-      { idQuarteirao, posicao: { $gt: posicao } },
+      { idQuarteirao, posicao: { $gte: posicao } },
       { $inc: { posicao: 1 } }
     );
 
     const novoImovel = await Imovel.create({
       idQuarteirao,
-      posicao: posicao + 1,
+      posicao: posicao,
       logradouro,
       numero,
       tipo,
