@@ -348,7 +348,7 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
       return res.status(404).json({ message: "Área não encontrada." });
     }
 
-    const quarteiroes = await Quarteirao.find({ idArea });
+    const quarteiroes = await Quarteirao.find({ idArea }).sort({ numero: 1 });
 
     if (!quarteiroes || quarteiroes.length === 0) {
       return res.status(404).json({ message: "Nenhum quarteirão encontrado." });
