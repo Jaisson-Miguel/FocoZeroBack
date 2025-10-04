@@ -470,6 +470,40 @@ app.post("/resetarResponsaveis", async (req, res) => {
   }
 });
 
+app.put("/atualizarQuarteiroes", async (req, res) => {
+  const { ids, trabalhadoPor } = req.body;
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res
+      .status(400)
+      .json({ message: "É necessário enviar um array de IDs." });
+  }
+
+  try {
+    const resultado = await Quarteirao.updateMany(
+      { _id: { $in: ids } },
+      {
+        $unset: { idResponsavel: "" },
+        $set: {
+          dataTrabalho: new Date(),
+          trabalhadoPor: trabalhadoPor || null,
+        },
+      }
+    );
+
+    res.status(200).json({
+      message: "Quarteirões atualizados com sucesso.",
+      quarteiroesAtualizados: resultado.modifiedCount,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Erro ao atualizar quarteirões.",
+      error: error.message,
+    });
+  }
+});
+
 app.get("/baixarQuarteiroesResponsavel/:idUsuario", async (req, res) => {
   try {
     const { idUsuario } = req.params;

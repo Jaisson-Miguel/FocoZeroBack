@@ -40,6 +40,14 @@ const quarteiraoModel = new Schema({
     ref: "Usuario",
     default: null,
   },
+  dataTrabalho: {
+    type: Date,
+  },
+  trabalhadoPor: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Usuario",
+    default: null,
+  },
 });
 
 export default model("Quarteirao", quarteiraoModel);
