@@ -512,7 +512,6 @@ app.get("/baixarQuarteiroesResponsavel/:idUsuario", async (req, res) => {
       return res.status(400).json({ message: "ID do usuário inválido." });
     }
 
-    // Buscar quarteirões do usuário e trazer os imóveis juntos
     const quarteiroes = await Quarteirao.aggregate([
       { $match: { idResponsavel: new mongoose.Types.ObjectId(idUsuario) } },
       {
@@ -525,24 +524,12 @@ app.get("/baixarQuarteiroesResponsavel/:idUsuario", async (req, res) => {
       },
       { $unwind: "$areaInfo" },
       {
-        $lookup: {
-          from: "imovels", // sua collection de imóveis
-          let: { quarteiraoId: "$_id" },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$idQuarteirao", "$$quarteiraoId"] } } },
-            { $sort: { posicao: 1 } }, // <-- Ordenação aqui
-          ],
-          as: "imoveis",
-        },
-      },
-      {
         $project: {
           _id: 1,
           numero: 1,
           nome: 1,
           idArea: 1,
           nomeArea: "$areaInfo.nome",
-          imoveis: 1,
         },
       },
       { $sort: { nomeArea: 1, numero: 1 } },
@@ -554,9 +541,41 @@ app.get("/baixarQuarteiroesResponsavel/:idUsuario", async (req, res) => {
 
     res.json(quarteiroes);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Erro ao buscar quarteirões", error: error.message });
+    res.status(500).json({
+      message: "Erro ao buscar quarteirões",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/baixarImoveisResponsavel/:idUsuario", async (req, res) => {
+  try {
+    const { idUsuario } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(idUsuario)) {
+      return res.status(400).json({ message: "ID do usuário inválido." });
+    }
+
+    // Primeiro busca os quarteirões do responsável
+    const quarteiroesIds = await Quarteirao.find({
+      idResponsavel: idUsuario,
+    }).distinct("_id");
+
+    // Depois busca todos os imóveis desses quarteirões
+    const imoveis = await Imovel.find({
+      idQuarteirao: { $in: quarteiroesIds },
+    }).sort({ posicao: 1 });
+
+    if (!imoveis || imoveis.length === 0) {
+      return res.status(404).json({ message: "Nenhum imóvel encontrado." });
+    }
+
+    res.json(imoveis);
+  } catch (error) {
+    res.status(500).json({
+      message: "Erro ao buscar imóveis",
+      error: error.message,
+    });
   }
 });
 
