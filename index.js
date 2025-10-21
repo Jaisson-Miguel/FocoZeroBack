@@ -936,6 +936,103 @@ app.get("/listarVisita", async (req, res) => {
   }
 });
 
+app.get("/visitasPorData", async (req, res) => {
+  try {
+    const { data } = req.query;
+
+    if (!data) {
+      return res.status(400).json({ message: "O campo 'data' é obrigatório." });
+    }
+
+    // Intervalo do dia
+    const inicio = new Date(data);
+    inicio.setHours(0, 0, 0, 0);
+    const fim = new Date(data);
+    fim.setHours(23, 59, 59, 999);
+
+    const visitas = await Visita.find({
+      dataVisita: { $gte: inicio, $lte: fim },
+    })
+      .populate({
+        path: "idImovel",
+        populate: {
+          path: "idQuarteirao",
+          populate: { path: "idArea" }, // 🔹 adiciona o populate da área
+        },
+      })
+      .populate("idAgente", "nome");
+
+    if (!visitas.length) {
+      return res
+        .status(404)
+        .json({ message: "Nenhuma visita encontrada para a data informada." });
+    }
+
+    // 🔹 Calcula o resumo
+    const resumo = {
+      totalVisitas: visitas.length,
+      totalPorTipoImovel: { r: 0, c: 0, tb: 0, out: 0, pe: 0 },
+      totalDepositosInspecionados: {
+        a1: 0,
+        a2: 0,
+        b: 0,
+        c: 0,
+        d1: 0,
+        d2: 0,
+        e: 0,
+      },
+      totalDepEliminados: 0,
+      totalImoveisLarvicida: 0,
+      totalLarvicidaAplicada: 0,
+      depositosTratadosComLarvicida: 0,
+      totalAmostras: 0,
+      totalFocos: 0,
+    };
+
+    visitas.forEach((v) => {
+      // Soma tipo de imóvel
+      if (resumo.totalPorTipoImovel[v.tipo] !== undefined) {
+        resumo.totalPorTipoImovel[v.tipo] += 1;
+      }
+
+      // Soma depósitos inspecionados
+      for (let key in v.depositosInspecionados) {
+        resumo.totalDepositosInspecionados[key] +=
+          v.depositosInspecionados[key];
+      }
+
+      // Depósitos eliminados
+      resumo.totalDepEliminados += v.qtdDepEliminado;
+
+      // Larvicida
+      if ((v.qtdLarvicida || 0) > 0 || (v.qtdDepTratado || 0) > 0) {
+        if ((v.qtdLarvicida || 0) > 0) resumo.totalImoveisLarvicida += 1;
+        resumo.totalLarvicidaAplicada += v.qtdLarvicida || 0;
+        resumo.depositosTratadosComLarvicida += v.qtdDepTratado || 0;
+      }
+
+      // Amostras
+      resumo.totalAmostras += v.amostraFinal - v.amostraInicial;
+
+      // Focos
+      if (v.foco) resumo.totalFocos += 1;
+    });
+
+    return res.status(200).json({
+      message: "Resumo diário gerado com sucesso.",
+      data,
+      resumo,
+      visitas,
+    });
+  } catch (error) {
+    console.error("Erro ao gerar resumo:", error);
+    res.status(500).json({
+      message: "Erro ao gerar resumo diário.",
+      error: error.message,
+    });
+  }
+});
+
 app.put("/editarVisita/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -1455,6 +1552,52 @@ app.post("/resetarCiclo/:id", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Não foi possível resetar o ciclo.",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/resumoCiclo/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const usuario = await Usuario.findById(id);
+
+    if (!usuario) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    if (usuario.funcao !== "adm") {
+      return res
+        .status(403)
+        .json({ message: "Seu usuário não tem acesso a essa função." });
+    }
+
+    // Busca todos os imóveis com status "visitado"
+    const imoveisVisitados = await Imovel.find({ status: "visitado" });
+
+    if (imoveisVisitados.length === 0) {
+      return res.status(200).json({
+        message: "Nenhum imóvel visitado encontrado.",
+        resumo: {},
+        totalVisitados: 0,
+      });
+    }
+
+    // Gera o resumo por tipo
+    const resumoPorTipo = {};
+    for (const imovel of imoveisVisitados) {
+      const tipo = imovel.tipo || "não definido";
+      resumoPorTipo[tipo] = (resumoPorTipo[tipo] || 0) + 1;
+    }
+
+    res.status(200).json({
+      message: "Resumo gerado com sucesso.",
+      totalVisitados: imoveisVisitados.length,
+      resumo: resumoPorTipo,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Não foi possível gerar o resumo do ciclo.",
       error: error.message,
     });
   }
