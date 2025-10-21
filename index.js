@@ -480,13 +480,28 @@ app.put("/atualizarQuarteiroes", async (req, res) => {
   }
 
   try {
+    // 🔹 Zera horário e salva em UTC
+    const agora = new Date();
+    const dataUTC = new Date(
+      Date.UTC(
+        agora.getFullYear(),
+        agora.getMonth(),
+        agora.getDate(),
+        0,
+        0,
+        0,
+        0
+      )
+    );
+
     const resultado = await Quarteirao.updateMany(
       { _id: { $in: ids } },
       {
         $unset: { idResponsavel: "" },
         $set: {
-          dataTrabalho: new Date(),
+          dataTrabalho: dataUTC,
           trabalhadoPor: trabalhadoPor || null,
+          trabalhado: true, // 👈 marca como concluído
         },
       }
     );
@@ -796,12 +811,12 @@ app.post("/cadastrarVisita", async (req, res) => {
     }
 
     const dataBruta = dataVisita ? new Date(dataVisita) : new Date();
-
     const dataUTC = new Date(
       Date.UTC(
         dataBruta.getFullYear(),
         dataBruta.getMonth(),
         dataBruta.getDate(),
+        0,
         0,
         0,
         0
@@ -1367,6 +1382,165 @@ app.delete("/excluirDiario/:id", async (req, res) => {
   }
 });
 
+app.get("/resumoDiario", async (req, res) => {
+  try {
+    const { idAgente, data } = req.query;
+
+    if (!idAgente || !data) {
+      return res
+        .status(400)
+        .json({ message: "Os campos 'idAgente' e 'data' são obrigatórios." });
+    }
+
+    const d = new Date(data); // data do front, "2025-10-21"
+    const inicio = new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate(),
+      0,
+      0,
+      0,
+      0
+    );
+    const fim = new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate(),
+      23,
+      59,
+      59,
+      999
+    );
+
+    console.log("===== RESUMO DIARIO =====");
+    console.log("Agente:", idAgente);
+    console.log("Data solicitada:", data);
+    console.log("Inicio UTC:", inicio);
+    console.log("Fim UTC:", fim);
+
+    // 🏘️ Busca quarteirões trabalhados pelo agente no dia
+    const quarteiroes = await Quarteirao.find({
+      trabalhadoPor: idAgente,
+      dataTrabalho: { $gte: inicio, $lte: fim },
+    })
+      .populate("idArea", "nome")
+      .lean();
+
+    console.log("Quarteirões encontrados:", quarteiroes.length);
+    quarteiroes.forEach((q) => {
+      console.log(
+        "  -",
+        q.numero,
+        q.idArea?.nome,
+        q.dataTrabalho,
+        q.trabalhado
+      );
+    });
+
+    // 🏠 Busca visitas do dia
+    const visitas = await Visita.find({
+      idAgente,
+      dataVisita: { $gte: inicio, $lte: fim },
+    })
+      .populate({
+        path: "idImovel",
+        populate: {
+          path: "idQuarteirao",
+          populate: { path: "idArea" },
+        },
+      })
+      .populate("idAgente", "nome")
+      .lean();
+
+    console.log("Visitas encontradas:", visitas.length);
+    visitas.forEach((v) => {
+      console.log(
+        "  - Imovel:",
+        v.idImovel?._id,
+        "Quarteirão:",
+        v.idImovel?.idQuarteirao?._id,
+        "Área:",
+        v.idImovel?.idQuarteirao?.idArea?._id,
+        "Data:",
+        v.dataVisita,
+        "Tipo:",
+        v.tipo
+      );
+    });
+
+    // 🧾 Monta resumo por área
+    const resumoPorArea = {};
+    visitas.forEach((v) => {
+      const area = v.idImovel?.idQuarteirao?.idArea;
+      const areaId = area?._id?.toString();
+      if (!areaId) return;
+
+      if (!resumoPorArea[areaId]) {
+        resumoPorArea[areaId] = {
+          idArea: areaId,
+          nomeArea: area.nome || "Sem nome",
+          totalVisitas: 0,
+          totalPorTipoImovel: { r: 0, c: 0, tb: 0, out: 0, pe: 0 },
+          totalDepositosInspecionados: {
+            a1: 0,
+            a2: 0,
+            b: 0,
+            c: 0,
+            d1: 0,
+            d2: 0,
+            e: 0,
+          },
+          totalDepEliminados: 0,
+          totalImoveisLarvicida: 0,
+          totalLarvicidaAplicada: 0,
+          depositosTratadosComLarvicida: 0,
+          totalAmostras: 0,
+          totalFocos: 0,
+        };
+      }
+
+      const resumo = resumoPorArea[areaId];
+      resumo.totalVisitas++;
+      if (resumo.totalPorTipoImovel[v.tipo] !== undefined)
+        resumo.totalPorTipoImovel[v.tipo]++;
+      for (let k in v.depositosInspecionados)
+        resumo.totalDepositosInspecionados[k] += v.depositosInspecionados[k];
+      resumo.totalDepEliminados += v.qtdDepEliminado || 0;
+      if ((v.qtdLarvicida || 0) > 0 || (v.qtdDepTratado || 0) > 0) {
+        if ((v.qtdLarvicida || 0) > 0) resumo.totalImoveisLarvicida++;
+        resumo.totalLarvicidaAplicada += v.qtdLarvicida || 0;
+        resumo.depositosTratadosComLarvicida += v.qtdDepTratado || 0;
+      }
+      resumo.totalAmostras += (v.amostraFinal || 0) - (v.amostraInicial || 0);
+      if (v.foco) resumo.totalFocos++;
+    });
+
+    console.log("Resumo por área gerado:", Object.values(resumoPorArea).length);
+
+    return res.status(200).json({
+      message: "Resumo diário gerado com sucesso.",
+      data,
+      agente: idAgente,
+      totalVisitas: visitas.length,
+      totalQuarteiroesTrabalhados: quarteiroes.length,
+      quarteiroesTrabalhados: quarteiroes.map((q) => ({
+        id: q._id,
+        nome: q.numero || "Sem número",
+        area: q.idArea?.nome || "Sem área",
+        dataTrabalho: q.dataTrabalho,
+        trabalhado: q.trabalhado,
+      })),
+      resumoPorArea: Object.values(resumoPorArea),
+    });
+  } catch (error) {
+    console.error("Erro ao gerar resumo diário:", error);
+    res.status(500).json({
+      message: "Erro ao gerar resumo diário.",
+      error: error.message,
+    });
+  }
+});
+
 // SEMANAL
 app.post("/cadastrarSemanal", async (req, res) => {
   try {
@@ -1572,15 +1746,30 @@ app.post("/resetarCiclo/:id", async (req, res) => {
         .json({ message: "Seu usuário não tem acesso a essa função." });
     }
 
-    const resultado = await Imovel.updateMany(
+    // 🔹 Resetar imóveis
+    const resultadoImoveis = await Imovel.updateMany(
       { status: "visitado" },
       { status: "fechado" }
     );
+
+    // 🔹 Resetar quarteirões apenas marcando trabalhado como false
+    const resultadoQuarteiroes = await Quarteirao.updateMany(
+      {}, // todos os quarteirões
+      {
+        $set: {
+          trabalhado: false,
+        },
+      }
+    );
+
     res.status(200).json({
-      message: "Ciclo resetado com sucesso. Todos os imóveis foram fechados.",
-      totalAtualizados: resultado.modifiedCount,
+      message:
+        "Ciclo resetado com sucesso. Todos os imóveis foram fechados e quarteirões foram marcados como não trabalhados.",
+      totalImoveisAtualizados: resultadoImoveis.modifiedCount,
+      totalQuarteiroesAtualizados: resultadoQuarteiroes.modifiedCount,
     });
   } catch (error) {
+    console.error(error);
     res.status(500).json({
       message: "Não foi possível resetar o ciclo.",
       error: error.message,

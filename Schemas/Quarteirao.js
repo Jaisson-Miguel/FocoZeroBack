@@ -48,6 +48,10 @@ const quarteiraoModel = new Schema({
     ref: "Usuario",
     default: null,
   },
+  trabalhado: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 export default model("Quarteirao", quarteiraoModel);
