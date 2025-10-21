@@ -1228,7 +1228,7 @@ app.post("/cadastrarDiario", async (req, res) => {
     const dia = dataBruta.getUTCDate();
     const inicioDia = new Date(Date.UTC(ano, mes, dia, 0, 0, 0, 0));
 
-    // Se quiser, ainda pode calcular a semana:
+    // Se quiser, ainda pode calcular a semana
     const semana = numeroSemana(inicioDia);
 
     const diario = await Diario.create({
@@ -1237,7 +1237,18 @@ app.post("/cadastrarDiario", async (req, res) => {
       semana,
       data: inicioDia,
       atividade: atividade || 4,
-      resumo, // usa o resumo enviado pelo front
+      resumo: {
+        quarteiroes: resumo.quarteiroes || [], // números dos quarteirões
+        totalQuarteiroes: resumo.totalQuarteiroes || 0, // total de quarteirões
+        totalVisitas: resumo.totalVisitas,
+        totalVisitasTipo: resumo.totalVisitasTipo || {},
+        totalDepInspecionados: resumo.totalDepInspecionados || {},
+        totalDepEliminados: resumo.totalDepEliminados || 0,
+        totalImoveisLarvicida: resumo.totalImoveisLarvicida || 0,
+        totalQtdLarvicida: resumo.totalQtdLarvicida || 0,
+        totalDepLarvicida: resumo.totalDepLarvicida || 0,
+        imoveisComFoco: resumo.imoveisComFoco || 0,
+      },
     });
 
     res.status(200).json({
@@ -1364,7 +1375,8 @@ app.get("/resumoDiario", async (req, res) => {
         .json({ message: "Os campos 'idAgente' e 'data' são obrigatórios." });
     }
 
-    const d = new Date(data); // data do front, "2025-10-21"
+    // 📅 Define o início e fim do dia
+    const d = new Date(data);
     const inicio = new Date(
       d.getFullYear(),
       d.getMonth(),
@@ -1384,7 +1396,7 @@ app.get("/resumoDiario", async (req, res) => {
       999
     );
 
-    // 🏘️ Busca quarteirões trabalhados pelo agente no dia
+    // 🏘️ Busca quarteirões trabalhados pelo agente
     const quarteiroes = await Quarteirao.find({
       trabalhadoPor: idAgente,
       dataTrabalho: { $gte: inicio, $lte: fim },
@@ -1409,6 +1421,45 @@ app.get("/resumoDiario", async (req, res) => {
 
     // 🧾 Monta resumo por área
     const resumoPorArea = {};
+
+    // Primeiro, adiciona os quarteirões
+    quarteiroes.forEach((q) => {
+      const area = q.idArea;
+      const areaId = area?._id?.toString();
+      if (!areaId) return;
+
+      if (!resumoPorArea[areaId]) {
+        resumoPorArea[areaId] = {
+          idArea: areaId,
+          nomeArea: area.nome || "Sem nome",
+          totalVisitas: 0,
+          totalPorTipoImovel: { r: 0, c: 0, tb: 0, out: 0, pe: 0 },
+          totalDepositosInspecionados: {
+            a1: 0,
+            a2: 0,
+            b: 0,
+            c: 0,
+            d1: 0,
+            d2: 0,
+            e: 0,
+          },
+          totalDepEliminados: 0,
+          totalImoveisLarvicida: 0,
+          totalLarvicidaAplicada: 0,
+          depositosTratadosComLarvicida: 0,
+          totalAmostras: 0,
+          totalFocos: 0,
+          quarteiroes: [],
+          totalQuarteiroes: 0,
+        };
+      }
+
+      const resumo = resumoPorArea[areaId];
+      resumo.quarteiroes.push(q.numero || "Sem número");
+      resumo.totalQuarteiroes = resumo.quarteiroes.length;
+    });
+
+    // Depois, adiciona as visitas
     visitas.forEach((v) => {
       const area = v.idImovel?.idQuarteirao?.idArea;
       const areaId = area?._id?.toString();
@@ -1435,25 +1486,36 @@ app.get("/resumoDiario", async (req, res) => {
           depositosTratadosComLarvicida: 0,
           totalAmostras: 0,
           totalFocos: 0,
+          quarteiroes: [],
+          totalQuarteiroes: 0,
         };
       }
 
       const resumo = resumoPorArea[areaId];
+
+      // 📊 Atualiza os totais das visitas
       resumo.totalVisitas++;
-      if (resumo.totalPorTipoImovel[v.tipo] !== undefined)
+      if (resumo.totalPorTipoImovel[v.tipo] !== undefined) {
         resumo.totalPorTipoImovel[v.tipo]++;
-      for (let k in v.depositosInspecionados)
+      }
+
+      for (let k in v.depositosInspecionados) {
         resumo.totalDepositosInspecionados[k] += v.depositosInspecionados[k];
+      }
+
       resumo.totalDepEliminados += v.qtdDepEliminado || 0;
+
       if ((v.qtdLarvicida || 0) > 0 || (v.qtdDepTratado || 0) > 0) {
         if ((v.qtdLarvicida || 0) > 0) resumo.totalImoveisLarvicida++;
         resumo.totalLarvicidaAplicada += v.qtdLarvicida || 0;
         resumo.depositosTratadosComLarvicida += v.qtdDepTratado || 0;
       }
+
       resumo.totalAmostras += (v.amostraFinal || 0) - (v.amostraInicial || 0);
       if (v.foco) resumo.totalFocos++;
     });
 
+    // 🔹 Retorno final
     return res.status(200).json({
       message: "Resumo diário gerado com sucesso.",
       data,

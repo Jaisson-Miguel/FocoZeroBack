@@ -27,14 +27,14 @@ const diarioModel = new Schema({
     default: 4,
   },
   resumo: {
-    // quarteiroesTrabalhados: {
-    //   type: String,
-    //   default: ""
-    // },
-    // totalQuarteiroesTrabalhados:{
-    //     type: Number,
-    //     required: true,
-    // },
+    quarteiroes: {
+      type: [String], // array de números de quarteirões
+      default: [],
+    },
+    totalQuarteiroes: {
+      type: Number,
+      default: 0,
+    },
     totalVisitas: {
       type: Number,
       required: true,
