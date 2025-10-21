@@ -944,11 +944,28 @@ app.get("/visitasPorData", async (req, res) => {
       return res.status(400).json({ message: "O campo 'data' é obrigatório." });
     }
 
-    // Intervalo do dia
-    const inicio = new Date(data);
-    inicio.setHours(0, 0, 0, 0);
-    const fim = new Date(data);
-    fim.setHours(23, 59, 59, 999);
+    const dataLocal = new Date(data); // "2025-10-20"
+    const inicio = new Date(
+      Date.UTC(
+        dataLocal.getFullYear(),
+        dataLocal.getMonth(),
+        dataLocal.getDate(),
+        0,
+        0,
+        0
+      )
+    );
+    const fim = new Date(
+      Date.UTC(
+        dataLocal.getFullYear(),
+        dataLocal.getMonth(),
+        dataLocal.getDate(),
+        23,
+        59,
+        59,
+        999
+      )
+    );
 
     const visitas = await Visita.find({
       dataVisita: { $gte: inicio, $lte: fim },
@@ -957,10 +974,11 @@ app.get("/visitasPorData", async (req, res) => {
         path: "idImovel",
         populate: {
           path: "idQuarteirao",
-          populate: { path: "idArea" }, // 🔹 adiciona o populate da área
+          populate: { path: "idArea" },
         },
       })
-      .populate("idAgente", "nome");
+      .populate("idAgente", "nome")
+      .lean();
 
     if (!visitas.length) {
       return res
@@ -968,66 +986,79 @@ app.get("/visitasPorData", async (req, res) => {
         .json({ message: "Nenhuma visita encontrada para a data informada." });
     }
 
-    // 🔹 Calcula o resumo
-    const resumo = {
-      totalVisitas: visitas.length,
-      totalPorTipoImovel: { r: 0, c: 0, tb: 0, out: 0, pe: 0 },
-      totalDepositosInspecionados: {
-        a1: 0,
-        a2: 0,
-        b: 0,
-        c: 0,
-        d1: 0,
-        d2: 0,
-        e: 0,
-      },
-      totalDepEliminados: 0,
-      totalImoveisLarvicida: 0,
-      totalLarvicidaAplicada: 0,
-      depositosTratadosComLarvicida: 0,
-      totalAmostras: 0,
-      totalFocos: 0,
-    };
+    // 🔹 Cria o resumo por área
+    const resumoPorArea = {};
 
     visitas.forEach((v) => {
-      // Soma tipo de imóvel
-      if (resumo.totalPorTipoImovel[v.tipo] !== undefined) {
-        resumo.totalPorTipoImovel[v.tipo] += 1;
+      const area = v.idImovel?.idQuarteirao?.idArea;
+      const areaId = area?._id?.toString();
+      if (!areaId) return; // pula imóveis sem área
+
+      // Inicializa se ainda não existir
+      if (!resumoPorArea[areaId]) {
+        resumoPorArea[areaId] = {
+          idArea: areaId,
+          nomeArea: area.nome || "Sem nome",
+          totalVisitas: 0,
+          totalPorTipoImovel: { r: 0, c: 0, tb: 0, out: 0, pe: 0 },
+          totalDepositosInspecionados: {
+            a1: 0,
+            a2: 0,
+            b: 0,
+            c: 0,
+            d1: 0,
+            d2: 0,
+            e: 0,
+          },
+          totalDepEliminados: 0,
+          totalImoveisLarvicida: 0,
+          totalLarvicidaAplicada: 0,
+          depositosTratadosComLarvicida: 0,
+          totalAmostras: 0,
+          totalFocos: 0,
+        };
       }
 
-      // Soma depósitos inspecionados
+      const resumo = resumoPorArea[areaId];
+      resumo.totalVisitas++;
+
+      // Tipo de imóvel
+      if (resumo.totalPorTipoImovel[v.tipo] !== undefined) {
+        resumo.totalPorTipoImovel[v.tipo]++;
+      }
+
+      // Depósitos inspecionados
       for (let key in v.depositosInspecionados) {
         resumo.totalDepositosInspecionados[key] +=
           v.depositosInspecionados[key];
       }
 
       // Depósitos eliminados
-      resumo.totalDepEliminados += v.qtdDepEliminado;
+      resumo.totalDepEliminados += v.qtdDepEliminado || 0;
 
       // Larvicida
       if ((v.qtdLarvicida || 0) > 0 || (v.qtdDepTratado || 0) > 0) {
-        if ((v.qtdLarvicida || 0) > 0) resumo.totalImoveisLarvicida += 1;
+        if ((v.qtdLarvicida || 0) > 0) resumo.totalImoveisLarvicida++;
         resumo.totalLarvicidaAplicada += v.qtdLarvicida || 0;
         resumo.depositosTratadosComLarvicida += v.qtdDepTratado || 0;
       }
 
       // Amostras
-      resumo.totalAmostras += v.amostraFinal - v.amostraInicial;
+      resumo.totalAmostras += (v.amostraFinal || 0) - (v.amostraInicial || 0);
 
       // Focos
-      if (v.foco) resumo.totalFocos += 1;
+      if (v.foco) resumo.totalFocos++;
     });
 
     return res.status(200).json({
-      message: "Resumo diário gerado com sucesso.",
+      message: "Resumo diário por área gerado com sucesso.",
       data,
-      resumo,
-      visitas,
+      resumoPorArea: Object.values(resumoPorArea), // retorna array, não objeto
     });
   } catch (error) {
     console.error("Erro ao gerar resumo:", error);
     res.status(500).json({
-      message: "Erro ao gerar resumo diário.",
+      message: "Erro ao gerar resumo diário por área.",
       error: error.message,
     });
   }
