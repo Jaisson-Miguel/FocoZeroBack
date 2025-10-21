@@ -362,6 +362,41 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
   }
 });
 
+// Certifique-se de que o modelo Imovel e mongoose estão importados
+// import Imovel from "./caminho/para/seu/imovelModel";
+// import mongoose from "mongoose"; 
+
+app.get("/listarRepasse/:idQuarteirao", async (req, res) => {
+  try {
+    const { idQuarteirao } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(idQuarteirao)) {
+      return res.status(400).json({ 
+        message: "ID do Quarteirão inválido." 
+      });
+    }
+
+    const imoveis = await Imovel.find({
+      idQuarteirao: idQuarteirao,
+      status: { $in: ["fechado", "recusa"] }, 
+    });
+
+    if (!imoveis || imoveis.length === 0) {
+      return res.status(404).json({ 
+        message: `Nenhum imóvel com status 'fechado' ou 'recusa' encontrado para o Quarteirão ${idQuarteirao}.` 
+      });
+    }
+
+    res.status(200).json(imoveis);
+    
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Erro interno do servidor ao buscar os imóveis.", 
+      error: error.message 
+    });
+  }
+});
+
 app.put("/editarQuarteirao/:id", async (req, res) => {
   try {
     const { id } = req.params;
