@@ -364,35 +364,34 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
 
 // Certifique-se de que o modelo Imovel e mongoose estão importados
 // import Imovel from "./caminho/para/seu/imovelModel";
-// import mongoose from "mongoose"; 
+// import mongoose from "mongoose";
 
 app.get("/listarRepasse/:idQuarteirao", async (req, res) => {
   try {
     const { idQuarteirao } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(idQuarteirao)) {
-      return res.status(400).json({ 
-        message: "ID do Quarteirão inválido." 
+      return res.status(400).json({
+        message: "ID do Quarteirão inválido.",
       });
     }
 
     const imoveis = await Imovel.find({
       idQuarteirao: idQuarteirao,
-      status: { $in: ["fechado", "recusa"] }, 
+      status: { $in: ["fechado", "recusa"] },
     });
 
     if (!imoveis || imoveis.length === 0) {
-      return res.status(404).json({ 
-        message: `Nenhum imóvel com status 'fechado' ou 'recusa' encontrado para o Quarteirão ${idQuarteirao}.` 
+      return res.status(404).json({
+        message: `Nenhum imóvel com status 'fechado' ou 'recusa' encontrado para o Quarteirão ${idQuarteirao}.`,
       });
     }
 
     res.status(200).json(imoveis);
-    
   } catch (error) {
-    res.status(500).json({ 
-      message: "Erro interno do servidor ao buscar os imóveis.", 
-      error: error.message 
+    res.status(500).json({
+      message: "Erro interno do servidor ao buscar os imóveis.",
+      error: error.message,
     });
   }
 });
@@ -1215,93 +1214,30 @@ app.delete("/excluirVisita", async (req, res) => {
 // DIÁRIO
 app.post("/cadastrarDiario", async (req, res) => {
   try {
-    const { idAgente, idArea, data, atividade } = req.body;
+    const { idAgente, idArea, data, atividade, resumo } = req.body;
 
-    if (!idAgente || !idArea || !data) {
+    if (!idAgente || !idArea || !data || !resumo) {
       return res
         .status(400)
         .json({ message: "Preencha os campos obrigatórios." });
     }
 
-    const dataRef = new Date(data);
-    dataRef.setHours(0, 0, 0, 0);
-    const inicioDia = new Date(dataRef);
-    const fimDia = new Date(dataRef);
-    fimDia.setHours(23, 59, 59, 999);
+    const dataBruta = new Date(data);
+    const ano = dataBruta.getUTCFullYear();
+    const mes = dataBruta.getUTCMonth();
+    const dia = dataBruta.getUTCDate();
+    const inicioDia = new Date(Date.UTC(ano, mes, dia, 0, 0, 0, 0));
 
-    let visitas = await Visita.find({
-      idAgente,
-      dataVisita: { $gte: inicioDia, $lte: fimDia },
-      status: "visitado",
-    }).populate({
-      path: "idImovel",
-      populate: { path: "idQuarteirao" },
-    });
-
-    visitas = visitas.filter(
-      (v) => v.idImovel?.idQuarteirao?.idArea?.toString() === idArea
-    );
-
-    if (!visitas.length) {
-      return res
-        .status(404)
-        .json({ message: "Nenhuma visita encontrada para essa data e área." });
-    }
-
-    const resumo = {
-      totalQuarteiroesTrabalhados: new Set(
-        visitas.map((v) => v.idImovel.idQuarteirao.numero)
-      ).size,
-      totalVisitas: visitas.length,
-      totalVisitasTipo: { r: 0, c: 0, tb: 0, pe: 0, out: 0 },
-      totalDepInspecionados: { a1: 0, a2: 0, b: 0, c: 0, d1: 0, d2: 0, e: 0 },
-      totalDepEliminados: 0,
-      totalImoveisLarvicida: 0,
-      totalQtdLarvicida: 0,
-      totalDepLarvicida: 0,
-      imoveisComFoco: 0,
-      quarteiroesTrabalhados: "",
-    };
-
-    const quarteiroesSet = new Set();
-
-    visitas.forEach((v) => {
-      resumo.totalVisitasTipo[v.tipo] += 1;
-
-      for (let key in v.depositosInspecionados) {
-        resumo.totalDepInspecionados[key] += v.depositosInspecionados[key];
-      }
-
-      resumo.totalDepEliminados += v.qtdDepEliminado;
-
-      if (v.qtdLarvicida > 0) {
-        resumo.totalImoveisLarvicida += 1;
-        resumo.totalQtdLarvicida += v.qtdLarvicida;
-        resumo.totalDepLarvicida += v.qtdDepTratado;
-      }
-
-      if (v.foco) {
-        resumo.imoveisComFoco += 1;
-      }
-
-      if (v.idImovel?.idQuarteirao?.numero) {
-        quarteiroesSet.add(v.idImovel.idQuarteirao.numero);
-      }
-    });
-
-    resumo.quarteiroesTrabalhados = Array.from(quarteiroesSet)
-      .sort((a, b) => a - b)
-      .join(", ");
-
-    const semana = numeroSemana(dataRef);
+    // Se quiser, ainda pode calcular a semana:
+    const semana = numeroSemana(inicioDia);
 
     const diario = await Diario.create({
       idAgente,
       idArea,
       semana,
-      data: dataRef,
+      data: inicioDia,
       atividade: atividade || 4,
-      resumo,
+      resumo, // usa o resumo enviado pelo front
     });
 
     res.status(200).json({
@@ -1309,6 +1245,7 @@ app.post("/cadastrarDiario", async (req, res) => {
       diario,
     });
   } catch (error) {
+    console.error("Erro ao cadastrar diário:", error);
     res
       .status(500)
       .json({ message: "Erro ao cadastrar diário.", error: error.message });
@@ -1447,12 +1384,6 @@ app.get("/resumoDiario", async (req, res) => {
       999
     );
 
-    console.log("===== RESUMO DIARIO =====");
-    console.log("Agente:", idAgente);
-    console.log("Data solicitada:", data);
-    console.log("Inicio UTC:", inicio);
-    console.log("Fim UTC:", fim);
-
     // 🏘️ Busca quarteirões trabalhados pelo agente no dia
     const quarteiroes = await Quarteirao.find({
       trabalhadoPor: idAgente,
@@ -1460,17 +1391,6 @@ app.get("/resumoDiario", async (req, res) => {
     })
       .populate("idArea", "nome")
       .lean();
-
-    console.log("Quarteirões encontrados:", quarteiroes.length);
-    quarteiroes.forEach((q) => {
-      console.log(
-        "  -",
-        q.numero,
-        q.idArea?.nome,
-        q.dataTrabalho,
-        q.trabalhado
-      );
-    });
 
     // 🏠 Busca visitas do dia
     const visitas = await Visita.find({
@@ -1486,22 +1406,6 @@ app.get("/resumoDiario", async (req, res) => {
       })
       .populate("idAgente", "nome")
       .lean();
-
-    console.log("Visitas encontradas:", visitas.length);
-    visitas.forEach((v) => {
-      console.log(
-        "  - Imovel:",
-        v.idImovel?._id,
-        "Quarteirão:",
-        v.idImovel?.idQuarteirao?._id,
-        "Área:",
-        v.idImovel?.idQuarteirao?.idArea?._id,
-        "Data:",
-        v.dataVisita,
-        "Tipo:",
-        v.tipo
-      );
-    });
 
     // 🧾 Monta resumo por área
     const resumoPorArea = {};
@@ -1550,8 +1454,6 @@ app.get("/resumoDiario", async (req, res) => {
       if (v.foco) resumo.totalFocos++;
     });
 
-    console.log("Resumo por área gerado:", Object.values(resumoPorArea).length);
-
     return res.status(200).json({
       message: "Resumo diário gerado com sucesso.",
       data,
@@ -1568,7 +1470,6 @@ app.get("/resumoDiario", async (req, res) => {
       resumoPorArea: Object.values(resumoPorArea),
     });
   } catch (error) {
-    console.error("Erro ao gerar resumo diário:", error);
     res.status(500).json({
       message: "Erro ao gerar resumo diário.",
       error: error.message,
