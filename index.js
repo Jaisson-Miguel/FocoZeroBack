@@ -360,11 +360,7 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
       .status(500)
       .json({ message: "Erro ao buscar quarteirões", error: error.message });
   }
-});
-
-// Certifique-se de que o modelo Imovel e mongoose estão importados
-// import Imovel from "./caminho/para/seu/imovelModel";
-// import mongoose from "mongoose"; 
+}); 
 
 app.get("/listarRepasse/:idQuarteirao", async (req, res) => {
   try {
@@ -580,6 +576,8 @@ app.get("/baixarQuarteiroesResponsavel/:idUsuario", async (req, res) => {
           nome: 1,
           idArea: 1,
           nomeArea: "$areaInfo.nome",
+          codigoArea: "$areaInfo.codigo",
+          zonaArea: "$areaInfo.zona",
         },
       },
       { $sort: { nomeArea: 1, numero: 1 } },
@@ -1427,7 +1425,7 @@ app.get("/resumoDiario", async (req, res) => {
         .json({ message: "Os campos 'idAgente' e 'data' são obrigatórios." });
     }
 
-    const d = new Date(data); // data do front, "2025-10-21"
+    const d = new Date(data);
     const inicio = new Date(
       d.getFullYear(),
       d.getMonth(),
