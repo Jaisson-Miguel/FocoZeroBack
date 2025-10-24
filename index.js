@@ -360,15 +360,11 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
       .status(500)
       .json({ message: "Erro ao buscar quarteirões", error: error.message });
   }
-<<<<<<< HEAD
-}); 
-=======
 });
 
 // Certifique-se de que o modelo Imovel e mongoose estão importados
-// import Imovel from "./caminho/para/seu/imovelModel";
+// import Imovel from ".git commit -m "Resolvendo conflito de merge após git pull"/caminho/para/seu/imovelModel";
 // import mongoose from "mongoose";
->>>>>>> d26689916588ab2b338c7df45f32ccd1c6d4bcae
 
 app.get("/listarRepasse/:idQuarteirao", async (req, res) => {
   try {
@@ -1381,10 +1377,7 @@ app.get("/resumoDiario", async (req, res) => {
         .json({ message: "Os campos 'idAgente' e 'data' são obrigatórios." });
     }
 
-<<<<<<< HEAD
-=======
     // 📅 Define o início e fim do dia
->>>>>>> d26689916588ab2b338c7df45f32ccd1c6d4bcae
     const d = new Date(data);
     const inicio = new Date(
       d.getFullYear(),
