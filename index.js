@@ -340,22 +340,70 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
     const { idArea } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(idArea)) {
-      return res.status(400).json({ message: "ID do quarteirão inválido." });
+      return res.status(400).json({ message: "ID da área inválido." });
     }
 
-    const areaExiste = await Area.findById(idArea);
+    // Converte o idArea de string para ObjectId para usar no $match
+    const areaObjectId = new mongoose.Types.ObjectId(idArea);
+
+    // Verifica se a área existe
+    const areaExiste = await Area.findById(idArea).select("nome");
     if (!areaExiste) {
       return res.status(404).json({ message: "Área não encontrada." });
     }
 
-    const quarteiroes = await Quarteirao.find({ idArea }).sort({ numero: 1 });
+    // Usando aggregate para buscar quarteirões da área e incluir info da área
+    const quarteiroes = await Quarteirao.aggregate([
+      // 1. Filtra os quarteirões pelo idArea recebido
+      { $match: { idArea: areaObjectId } },
+
+      // 2. Realiza o join (lookup) com a coleção 'areas'
+      {
+        $lookup: {
+          from: "areas", // Nome da coleção (geralmente plural e minúsculo)
+          localField: "idArea", // Campo no modelo Quarteirao
+          foreignField: "_id", // Campo na coleção areas
+          as: "areaInfo", // Nome do novo campo array que conterá os dados da área
+        },
+      },
+
+      // 3. Desestrutura (unwind) o array 'areaInfo' para transformar em objeto
+      // Isso é seguro, pois $match garante que idArea existe e está vinculado
+      { $unwind: "$areaInfo" },
+
+      // 4. Projeta os campos que queremos retornar
+      {
+        $project: {
+          _id: 1,
+          numero: 1,
+          // Outros campos do Quarteirão, se houver:
+          // nome: 1,
+          // idResponsavel: 1,
+
+          // Informações da Área injetadas:
+          nomeArea: "$areaInfo.nome",
+          codigoArea: "$areaInfo.codigo",
+          zonaArea: "$areaInfo.zona",
+
+          // Mantém o idArea original se for necessário no front-end
+          idArea: 1,
+        },
+      },
+
+      // 5. Ordena os resultados
+      { $sort: { numero: 1 } },
+    ]);
 
     if (!quarteiroes || quarteiroes.length === 0) {
-      return res.status(404).json({ message: "Nenhum quarteirão encontrado." });
+      // Se a área existe, mas não tem quarteirões, retorna 404 (ou 200 com array vazio)
+      return res
+        .status(404)
+        .json({ message: "Nenhum quarteirão encontrado nesta área." });
     }
 
     res.json(quarteiroes);
   } catch (error) {
+    console.error("Erro em /listarQuarteiroes/:idArea:", error);
     res
       .status(500)
       .json({ message: "Erro ao buscar quarteirões", error: error.message });
