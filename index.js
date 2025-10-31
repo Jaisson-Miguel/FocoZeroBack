@@ -119,7 +119,6 @@ app.get("/listarUsuarios", async (req, res) => {
   try {
     const { funcao } = req.query;
     let usuarios;
-    console.log(funcao);
 
     if (funcao) {
       usuarios = await Usuario.find({ funcao });
@@ -758,7 +757,6 @@ app.post("/cadastrarImovel", async (req, res) => {
         qtdGatos: qtdGatos || 0,
       },
     });
-    console.log("Imóvel criado:", novoImovel);
 
     res.status(200).json({
       message: "Imóvel cadastrado com sucesso.",
