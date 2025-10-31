@@ -758,6 +758,7 @@ app.post("/cadastrarImovel", async (req, res) => {
         qtdGatos: qtdGatos || 0,
       },
     });
+    console.log("Imóvel criado:", novoImovel);
 
     res.status(200).json({
       message: "Imóvel cadastrado com sucesso.",
