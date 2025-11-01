@@ -713,6 +713,7 @@ app.post("/cadastrarImovel", async (req, res) => {
       qtdGatos,
       observacao,
     } = req.body;
+
     if (
       !idQuarteirao ||
       posicao === undefined ||
@@ -731,11 +732,15 @@ app.post("/cadastrarImovel", async (req, res) => {
       return res.status(404).json({ message: "Quarteirão não encontrado." });
     }
 
-    await Imovel.updateMany(
-      { idQuarteirao, posicao: { $gte: posicao } },
-      { $inc: { posicao: 1 } }
-    );
+    // Se posição não for 0, incrementa antes de cadastrar
+    if (posicao !== 0) {
+      await Imovel.updateMany(
+        { idQuarteirao, posicao: { $gte: posicao } },
+        { $inc: { posicao: 1 } }
+      );
+    }
 
+    // Cadastra o imóvel
     const novoImovel = await Imovel.create({
       idQuarteirao,
       posicao: posicao,
@@ -748,6 +753,12 @@ app.post("/cadastrarImovel", async (req, res) => {
       observacao: observacao || "Nenhuma observação.",
     });
 
+    // Se posição for 0, incrementa depois de cadastrar
+    if (posicao === 0) {
+      await Imovel.updateMany({ idQuarteirao }, { $inc: { posicao: 1 } });
+    }
+
+    // Atualiza contadores do quarteirão
     await Quarteirao.findByIdAndUpdate(idQuarteirao, {
       $inc: {
         totalImoveis: 1,
