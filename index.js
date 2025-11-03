@@ -1245,9 +1245,6 @@ app.get("/visitas/detalhes", async (req, res) => {
         const fimDia = new Date(Date.UTC(ano, mes - 1, dia, 23, 59, 59, 999));
         
         // Log para verificação no seu console do servidor (opcional)
-        console.log(`Buscando visitas para o dia: ${data}`);
-        console.log(`Período UTC: De ${inicioDia.toISOString()} até ${fimDia.toISOString()}`);
-
 
         // 3. BUSCA DAS VISITAS COM POPULATE
         const visitas = await Visita.find({
@@ -1481,8 +1478,6 @@ app.get("/diarios/agente/:idAgente", async (req, res) => {
         }
         const agenteObjectId = new mongoose.Types.ObjectId(idAgente);
         
-        console.log(`[BACKEND LOG] Buscando diários para ObjectId: ${agenteObjectId}`);
-
         const diáriosAgrupados = await Diario.aggregate([
             { 
                 $match: { 
@@ -1505,8 +1500,6 @@ app.get("/diarios/agente/:idAgente", async (req, res) => {
             },
             { $sort: { _id: -1 } } 
         ]);
-
-        console.log(`[BACKEND LOG] ${diáriosAgrupados.length} grupos de semanas encontrados.`);
         
         res.status(200).json(diáriosAgrupados);
 
