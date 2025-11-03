@@ -230,6 +230,47 @@ app.get("/listarAreas", async (req, res) => {
   }
 });
 
+// Importações necessárias (assumidas)
+// const mongoose = require('mongoose');
+// const Area = require('./models/Area'); // Ajuste o caminho conforme sua estrutura
+// const app = express(); // Se estiver em um arquivo de servidor
+
+app.get("/areas/:idArea", async (req, res) => {
+    const { idArea } = req.params;
+
+    // 1. Validação do formato do ID (Crucial para IDs do MongoDB)
+    if (!mongoose.Types.ObjectId.isValid(idArea)) {
+        console.warn(`Tentativa de busca com ID inválido: ${idArea}`);
+        return res.status(400).json({ 
+            message: "ID de Área inválido. O ID deve ser um ObjectId válido." 
+        });
+    }
+
+    try {
+        // 2. Busca a área pelo _id
+        const area = await Area.findById(idArea);
+
+        if (!area) {
+            return res.status(404).json({ message: "Área não encontrada." });
+        }
+
+        // 3. Retorna os dados da área (o frontend espera o campo 'nome' ou 'nomeArea')
+        res.status(200).json({ 
+            nome: area.nome || area.nomeArea || `Área ID: ${area._id}`,
+            id: area._id,
+            // Você pode incluir mais campos aqui se o frontend precisar
+        });
+        
+    } catch (error) {
+        console.error("Erro ao buscar área por ID:", error.message);
+        res.status(500).json({ 
+            message: "Erro interno no servidor ao buscar área.", 
+            error: error.message 
+        });
+    }
+});
+
+
 app.put("/editarArea/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -1173,6 +1214,114 @@ app.get("/visitasPorData", async (req, res) => {
     });
   }
 });
+
+app.get("/visitas/detalhes", async (req, res) => {
+    try {
+        // 1. OBTENÇÃO E VALIDAÇÃO DE PARÂMETROS
+        const { idAgente, data } = req.query;
+
+        if (!idAgente || !data) {
+            return res.status(400).json({ 
+                message: "Os campos 'idAgente' e 'data' são obrigatórios.", 
+                details: "Use /visitas/detalhes?idAgente=...&data=AAAA-MM-DD"
+            });
+        }
+        
+        if (!mongoose.Types.ObjectId.isValid(idAgente)) {
+            return res.status(400).json({ message: "ID do Agente inválido." });
+        }
+
+        // 2. ✅ CORREÇÃO CRÍTICA: DEFINIÇÃO DO PERÍODO (Início e Fim do dia em UTC)
+        
+        // Desconstrói a string AAAA-MM-DD diretamente em números (Ex: 2025, 11, 3)
+        // Isso anula qualquer conversão de fuso horário.
+        const [ano, mes, dia] = data.split('-').map(Number);
+        
+        // O Date.UTC usa o mês baseado em zero (Janeiro=0, Dezembro=11).
+        // Criamos o limite inferior (00:00:00.000Z) para o dia exato requisitado.
+        const inicioDia = new Date(Date.UTC(ano, mes - 1, dia, 0, 0, 0, 0));
+        
+        // Criamos o limite superior (23:59:59.999Z) para o dia exato requisitado.
+        const fimDia = new Date(Date.UTC(ano, mes - 1, dia, 23, 59, 59, 999));
+        
+        // Log para verificação no seu console do servidor (opcional)
+        console.log(`Buscando visitas para o dia: ${data}`);
+        console.log(`Período UTC: De ${inicioDia.toISOString()} até ${fimDia.toISOString()}`);
+
+
+        // 3. BUSCA DAS VISITAS COM POPULATE
+        const visitas = await Visita.find({
+            idAgente,
+            // O MongoDB armazena datas em UTC, e a comparação abaixo funciona corretamente
+            // porque inicioDia e fimDia também estão em UTC.
+            dataVisita: { $gte: inicioDia, $lte: fimDia },
+        })
+        .populate({
+            // Popula o Imóvel
+            path: "idImovel",
+            select: "rua numero idQuarteirao tipoImovel", 
+            populate: {
+                // Popula o Quarteirão dentro do Imóvel
+                path: "idQuarteirao",
+                select: "numero idArea",
+                // Popula a Área dentro do Quarteirão
+                populate: {
+                    path: "idArea",
+                    select: "nome" 
+                }
+            },
+        })
+        .lean(); 
+
+        if (!visitas.length) {
+            return res.status(404).json({ 
+                message: "Nenhuma visita encontrada para o agente e data informados." 
+            });
+        }
+
+        // 4. AGRUPAMENTO DAS VISITAS POR QUARTEIRÃO (Inalterado)
+        const visitasAgrupadas = {};
+
+        visitas.forEach(v => {
+            const quarteirao = v.idImovel?.idQuarteirao;
+            
+            if (!quarteirao || !quarteirao._id) return; 
+
+            const quarteiraoId = quarteirao._id.toString();
+
+            if (!visitasAgrupadas[quarteiraoId]) {
+                visitasAgrupadas[quarteiraoId] = {
+                    _id: quarteiraoId,
+                    numeroQuarteirao: quarteirao.numero || "QRT sem número",
+                    nomeArea: quarteirao.idArea?.nome || "Área Desconhecida",
+                    visitas: [],
+                };
+            }
+
+            visitasAgrupadas[quarteiraoId].visitas.push({
+                _id: v._id,
+                tipoImovel: v.idImovel.tipoImovel || v.tipo, 
+                rua: v.idImovel.rua || "Rua não informada",
+                numeroImovel: v.idImovel.numero || "S/N",
+                dataVisita: v.dataVisita,
+            });
+        });
+
+        // 5. RESPOSTA DE SUCESSO
+        const resultadoFinal = Object.values(visitasAgrupadas);
+
+        return res.status(200).json(resultadoFinal);
+
+    } catch (error) {
+        console.error("ERRO CRÍTICO na rota /visitas/detalhes:", error); 
+        res.status(500).json({ 
+            message: "Erro interno no servidor ao buscar detalhes das visitas.", 
+            error: error.message 
+        });
+    }
+});
+
+
 
 app.put("/editarVisita/:id", async (req, res) => {
   try {
