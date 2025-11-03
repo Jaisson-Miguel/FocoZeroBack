@@ -628,6 +628,7 @@ app.get("/baixarQuarteiroesResponsavel/:idUsuario", async (req, res) => {
           nomeArea: "$areaInfo.nome",
           codigoArea: "$areaInfo.codigo",
           zonaArea: "$areaInfo.zona",
+          mapaUrl: "$areaInfo.mapaUrl",
         },
       },
       { $sort: { nomeArea: 1, numero: 1 } },
