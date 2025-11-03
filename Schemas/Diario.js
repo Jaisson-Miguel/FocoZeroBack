@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
-
-import { Schema, Model, model } from "mongoose";
+import { Schema, model } from "mongoose";
 
 const diarioModel = new Schema({
   idAgente: {
@@ -74,6 +73,11 @@ const diarioModel = new Schema({
     imoveisComFoco: {
       type: Number,
       default: 0,
+    },
+    idsVisitas: {
+      type: [mongoose.Schema.Types.ObjectId], // ⬅️ adiciona aqui os IDs das visitas
+      ref: "Visita",
+      default: [],
     },
   },
 });
