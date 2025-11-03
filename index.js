@@ -1289,7 +1289,6 @@ app.post("/cadastrarDiario", async (req, res) => {
     const dia = dataBruta.getUTCDate();
     const inicioDia = new Date(Date.UTC(ano, mes, dia, 0, 0, 0, 0));
 
-    // Se quiser, ainda pode calcular a semana
     const semana = numeroSemana(inicioDia);
 
     const diario = await Diario.create({
@@ -1324,33 +1323,100 @@ app.post("/cadastrarDiario", async (req, res) => {
   }
 });
 
-app.post("/listarDiario", async (req, res) => {
-  try {
-    const { idAgente, idArea, semana } = req.body;
-    const filtro = {};
+app.get("/diarios/agente/:idAgente", async (req, res) => {
+    const { idAgente } = req.params;
 
-    if (idAgente) filtro.idAgente = idAgente;
-    if (idArea) filtro.idArea = idArea;
-    if (semana) filtro.semana = semana;
+    try {
+        if (!mongoose.Types.ObjectId.isValid(idAgente)) {
+            return res.status(400).json({ message: "ID do Agente inválido." });
+        }
+        const agenteObjectId = new mongoose.Types.ObjectId(idAgente);
+        
+        console.log(`[BACKEND LOG] Buscando diários para ObjectId: ${agenteObjectId}`);
 
-    const diario = await Diario.findOne({
-      idAgente,
-      idArea,
-      semana: parseInt(semana, 10),
-    });
+        const diáriosAgrupados = await Diario.aggregate([
+            { 
+                $match: { 
+                    idAgente: agenteObjectId 
+                } 
+            },
+            {
+                $group: {
+                    _id: "$semana", 
+                    totalDiarios: { $sum: 1 },
+                    diarios: { 
+                        $push: { 
+                            _id: "$_id",
+                            data: "$data",
+                            idArea: "$idArea",
+                            totalVisitas: "$resumo.totalVisitas" 
+                        } 
+                    },
+                }
+            },
+            { $sort: { _id: -1 } } 
+        ]);
 
-    if (!diario) {
-      return res
-        .status(404)
-        .json({ message: "Diário não encontrado para essa semana." });
+        console.log(`[BACKEND LOG] ${diáriosAgrupados.length} grupos de semanas encontrados.`);
+        
+        res.status(200).json(diáriosAgrupados);
+
+    } catch (error) {
+        console.error("ERRO CRÍTICO na rota /diarios/agente/:idAgente:", error); 
+        res.status(500).json({ 
+            message: "Erro interno no servidor ao listar diários.", 
+            error: error.message 
+        });
+    }
+});
+
+// Este código deve estar no mesmo arquivo onde 'app.post("/cadastrarDiario", ...)' está, 
+// e onde 'Diario' está importado.
+
+// Assumindo que 'Diario' (seu model Mongoose) e 'app' (seu Express app) estão disponíveis.
+
+app.get("/diarios/:diarioId", async (req, res) => {
+    const { diarioId } = req.params;
+
+    // 1. VALIDAÇÃO DO FORMATO DO ID (Obrigatório, pois evita o erro 500 do Mongo)
+    if (!mongoose.Types.ObjectId.isValid(diarioId)) {
+        // 🚨 Retorna 400 (Bad Request) e JSON de ERRO
+        return res.status(400).json({ 
+            message: "ID do diário inválido.",
+            details: "O formato do ID fornecido não é um ObjectId válido."
+        });
     }
 
-    res.status(200).json(diario);
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Erro ao listar diário.", error: error.message });
-  }
+    try {
+        // 2. BUSCA NO BANCO DE DADOS
+        // .lean() melhora a performance se você só for ler o objeto
+        const diario = await Diario.findById(diarioId)
+            .lean(); 
+
+        // 3. TRATAMENTO: DOCUMENTO NÃO ENCONTRADO
+        if (!diario) {
+            // 🚨 Retorna 404 (Not Found) e JSON de ERRO
+            return res.status(404).json({ 
+                message: "Diário não encontrado.",
+                details: `Nenhum diário foi encontrado com o ID: ${diarioId}`
+            });
+        }
+
+        // 4. SUCESSO! RETORNA O DOCUMENTO ENCONTRADO
+        // O corpo da resposta (diario) tem o campo 'resumo', que o front-end espera.
+        // 🟢 Retorna 200 (OK) e o JSON do diário
+        return res.status(200).json(diario);
+
+    } catch (error) {
+        console.error(`ERRO CRÍTICO na rota /diarios/${diarioId}:`, error);
+        
+        // 5. TRATAMENTO: ERRO INTERNO DO SERVIDOR
+        // 🚨 Retorna 500 (Internal Server Error) e JSON de ERRO
+        return res.status(500).json({ 
+            message: "Erro interno do servidor ao buscar diário.",
+            error: error.message
+        });
+    }
 });
 
 app.put("/editarDiario/:id", async (req, res) => {
