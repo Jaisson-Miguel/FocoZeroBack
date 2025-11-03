@@ -27,7 +27,7 @@ const diarioModel = new Schema({
   },
   resumo: {
     quarteiroes: {
-      type: [String], // array de números de quarteirões
+      type: [String],
       default: [],
     },
     totalQuarteiroes: {
@@ -75,7 +75,7 @@ const diarioModel = new Schema({
       default: 0,
     },
     idsVisitas: {
-      type: [mongoose.Schema.Types.ObjectId], // ⬅️ adiciona aqui os IDs das visitas
+      type: [mongoose.Schema.Types.ObjectId],
       ref: "Visita",
       default: [],
     },
