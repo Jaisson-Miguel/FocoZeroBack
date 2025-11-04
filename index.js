@@ -1999,8 +1999,9 @@ app.post("/resetarCiclo/:id", async (req, res) => {
 app.get("/resumoCiclo/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const usuario = await Usuario.findById(id);
 
+    // Verifica se o usuário existe
+    const usuario = await Usuario.findById(id);
     if (!usuario) {
       return res.status(404).json({ message: "Usuário não encontrado." });
     }
@@ -2011,41 +2012,100 @@ app.get("/resumoCiclo/:id", async (req, res) => {
         .json({ message: "Seu usuário não tem acesso a essa função." });
     }
 
-    const imoveisVisitados = await Imovel.find({ status: "visitado" });
+    // Busca todos os imóveis
+    const imoveis = await Imovel.find()
+      .populate({
+        path: "idQuarteirao",
+        populate: { path: "idArea" },
+      })
+      .lean();
 
-    if (imoveisVisitados.length === 0) {
+    if (!imoveis.length) {
       return res.status(200).json({
-        message: "Nenhum imóvel visitado encontrado.",
-        resumo: {},
+        message: "Nenhum imóvel encontrado.",
         totalVisitados: 0,
+        totalNaoVisitados: 0,
+        totalGeral: 0,
+        percentualNaoVisitados: 0,
+        resumo: [],
       });
     }
 
-    const resumoPorTipo = {};
-    for (const imovel of imoveisVisitados) {
-      const tipo = imovel.tipo || "não definido";
-      resumoPorTipo[tipo] = (resumoPorTipo[tipo] || 0) + 1;
+    // Agrupa por área
+    const agrupadoPorArea = {};
+
+    for (const imovel of imoveis) {
+      const area = imovel.idQuarteirao?.idArea;
+      if (!area) continue;
+
+      const idArea = area._id.toString();
+      if (!agrupadoPorArea[idArea]) {
+        agrupadoPorArea[idArea] = {
+          idArea,
+          nomeArea: area.nome,
+          totalVisitados: 0,
+          totalNaoVisitados: 0,
+        };
+      }
+
+      if (imovel.status === "visitado") {
+        agrupadoPorArea[idArea].totalVisitados += 1;
+      } else {
+        agrupadoPorArea[idArea].totalNaoVisitados += 1;
+      }
     }
 
+    const resultado = Object.values(agrupadoPorArea);
+
+    // Totais gerais
+    const totalVisitados = imoveis.filter(
+      (i) => i.status === "visitado"
+    ).length;
+    const totalNaoVisitados = imoveis.filter(
+      (i) => i.status !== "visitado"
+    ).length;
+    const totalGeral = totalVisitados + totalNaoVisitados;
+
+    // Percentual de não visitados
+    const percentualNaoVisitados =
+      totalGeral > 0 ? ((totalNaoVisitados / totalGeral) * 100).toFixed(2) : 0;
+
     res.status(200).json({
-      message: "Resumo gerado com sucesso.",
-      totalVisitados: imoveisVisitados.length,
-      resumo: resumoPorTipo,
+      message: "Resumo de imóveis gerado com sucesso.",
+      totalVisitados,
+      totalNaoVisitados,
+      totalGeral,
+      percentualNaoVisitados: Number(percentualNaoVisitados),
+      resumo: resultado,
     });
   } catch (error) {
+    console.error("Erro no /resumoCiclo:", error);
     res.status(500).json({
-      message: "Não foi possível gerar o resumo do ciclo.",
+      message: "Erro ao gerar resumo de imóveis.",
       error: error.message,
     });
   }
 });
 
-function numeroSemana(d) {
-  const data = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dia = data.getDay() || 7;
-  data.setDate(data.getDate() + 4 - dia);
-  const ano1 = new Date(data.getFullYear(), 0, 1);
-  return Math.ceil(((data - ano1) / 86400000 + 1) / 7);
+function numeroSemana(data) {
+  const d = new Date(data);
+  d.setHours(0, 0, 0, 0);
+
+  // Pega o primeiro dia do ano
+  const inicioAno = new Date(d.getFullYear(), 0, 1);
+  inicioAno.setHours(0, 0, 0, 0);
+
+  // Calcula o número de dias entre o início do ano e a data atual
+  const diffDias = Math.floor((d - inicioAno) / 86400000);
+
+  // Pega o dia da semana do primeiro dia do ano (0 = domingo)
+  const primeiroDiaSemana = inicioAno.getDay();
+
+  // Ajusta o deslocamento para que a semana comece no domingo
+  const ajuste = (diffDias + primeiroDiaSemana) / 7;
+
+  // Retorna o número da semana (começando no domingo)
+  return Math.floor(ajuste) + 1;
 }
 
 function areaExiste(id) {
