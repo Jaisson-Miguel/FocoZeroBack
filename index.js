@@ -1762,98 +1762,226 @@ app.get("/resumoDiario", async (req, res) => {
   }
 });
 
+app.get("/diariosPendentesFechamento/:idAgente/:semana", async (req, res) => {
+    try {
+        const { idAgente, semana } = req.params;
+
+        // 1. Encontrar todas as áreas que JÁ FORAM fechadas naquela semana/agente.
+        const semanaisFechados = await Semanal.find({ idAgente, semana })
+            .select('idArea')
+            .lean();
+            
+        const idsAreasFechadas = semanaisFechados.map(s => s.idArea.toString());
+        
+        // 2. Encontrar todos os Diários para o Agente e Semana
+        // Projetamos apenas os campos necessários para otimizar a busca.
+        const diarios = await Diario.find({ idAgente, semana })
+            .select('idArea data')
+            .lean();
+
+        if (!diarios.length) {
+            // Nenhum diário encontrado (mesmo que não haja semanais fechados)
+            return res.status(404).json({ message: "Nenhum diário pendente ou já fechado encontrado para esta semana." });
+        }
+        
+        // 3. Agrupar os diários por idArea, filtrando as que JÁ estão fechadas
+        const areasPendentesMap = diarios.reduce((acc, diario) => {
+            const idArea = diario.idArea.toString();
+
+            // Verifica se a área JÁ FOI FECHADA semanalmente
+            if (!idsAreasFechadas.includes(idArea)) {
+                
+                if (!acc[idArea]) {
+                    acc[idArea] = { 
+                        idArea: diario.idArea, 
+                        diariosCount: 0,
+                        datasTrabalhadas: new Set(),
+                        // Inicializa o campo para o nome, se for buscar
+                        nomeArea: null, 
+                    };
+                }
+                acc[idArea].diariosCount += 1;
+                
+                // Adiciona a data (apenas a parte da data) para contagem de dias trabalhados
+                if (diario.data) {
+                    acc[idArea].datasTrabalhadas.add(new Date(diario.data).toISOString().slice(0, 10));
+                }
+            }
+            return acc;
+        }, {});
+
+        const areasPendentes = Object.values(areasPendentesMap);
+
+        if (!areasPendentes.length) {
+            // Todos os diários encontrados já foram fechados em um relatório Semanal.
+            return res.status(404).json({ message: "Todos os diários desta semana já foram fechados em relatórios semanais." });
+        }
+
+
+        // 4. (Opcional, mas RECOMENDADO): Buscar os nomes das Áreas
+        const idsParaBuscarNome = areasPendentes.map(area => area.idArea);
+        
+        // Buscamos os nomes das áreas de uma vez
+        const areasComNome = await Area.find({ _id: { $in: idsParaBuscarNome } })
+            .select('_id nome nomeArea') // Ajuste 'nome' ou 'nomeArea' conforme seu schema Area
+            .lean();
+
+        const areaNomeLookup = areasComNome.reduce((acc, area) => {
+            acc[area._id.toString()] = area.nome || area.nomeArea || `Área ID: ${area._id.toString().slice(-4)}`;
+            return acc;
+        }, {});
+
+        
+        // 5. Formatar a resposta final
+        const areasFormatadas = areasPendentes.map(area => ({
+            idArea: area.idArea,
+            // Adiciona o nome encontrado
+            nomeArea: areaNomeLookup[area.idArea.toString()] || `Área ID: ${area.idArea.toString().slice(-4)}`, 
+            diariosCount: area.diariosCount,
+            qtdDiasTrabalhados: area.datasTrabalhadas.size,
+            semana: parseInt(semana) // Inclui a semana de volta (útil para o frontend)
+        }));
+
+        res.status(200).json(areasFormatadas);
+
+    } catch (error) {
+        console.error("Erro ao buscar diários pendentes para fechamento semanal:", error);
+        res.status(500).json({ message: "Erro interno do servidor ao buscar áreas pendentes.", error: error.message });
+    }
+});
+
 // SEMANAL
 app.post("/cadastrarSemanal", async (req, res) => {
-  try {
-    const { idAgente, idArea, semana, atividade } = req.body;
+    try {
+        const { idAgente, idArea, semana, atividade } = req.body;
 
-    if (!idAgente || !idArea || !semana) {
-      return res
-        .status(400)
-        .json({ message: "Preencha os campos obrigatórios." });
+        if (!idAgente || !idArea || !semana) {
+            return res
+                .status(400)
+                .json({ message: "Preencha os campos obrigatórios: idAgente, idArea e semana." });
+        }
+
+        // 1. Encontrar todos os diários da semana e área
+        const diarios = await Diario.find({
+            idAgente,
+            idArea,
+            semana,
+            // Opcional: Você pode querer ignorar diários que já foram ligados a um semanal
+            // (Assumindo que você teria um campo 'idSemanal' no Diario)
+        });
+
+        if (!diarios.length) {
+            return res
+                .status(404)
+                .json({ message: "Nenhum diário encontrado para essa semana e área." });
+        }
+        
+        // 2. Coletar os IDs dos diários para ligar ao Semanal
+        const idsDiarios = diarios.map(d => d._id); // <<< CORREÇÃO PRINCIPAL
+
+        // 3. Inicialização e Agregação do Resumo
+        const resumo = {
+            quarteiroesTrabalhados: "", // Será preenchido abaixo
+            totalQuarteiroesTrabalhados: 0,
+            totalVisitas: 0,
+            totalVisitasTipo: { r: 0, c: 0, tb: 0, pe: 0, out: 0 },
+            totalDepInspecionados: { a1: 0, a2: 0, b: 0, c: 0, d1: 0, d2: 0, e: 0 },
+            totalDepEliminados: 0,
+            totalImoveisLarvicida: 0,
+            totalQtdLarvicida: 0,
+            totalDepLarvicida: 0,
+            imoveisComFoco: 0,
+        };
+
+        const quarteiroesSet = new Set();
+        const diasSet = new Set();
+
+        diarios.forEach((d) => {
+            // Soma simples dos campos
+            resumo.totalQuarteiroesTrabalhados += d.resumo.totalQuarteiroesTrabalhados || 0;
+            resumo.totalVisitas += d.resumo.totalVisitas || 0;
+            resumo.totalDepEliminados += d.resumo.totalDepEliminados || 0;
+            resumo.totalImoveisLarvicida += d.resumo.totalImoveisLarvicida || 0;
+            resumo.totalQtdLarvicida += d.resumo.totalQtdLarvicida || 0;
+            resumo.totalDepLarvicida += d.resumo.totalDepLarvicida || 0;
+            resumo.imoveisComFoco += d.resumo.imoveisComFoco || 0;
+
+            // Agregação de tipos de visita
+            for (let key in resumo.totalVisitasTipo) {
+                resumo.totalVisitasTipo[key] += d.resumo.totalVisitasTipo[key] || 0;
+            }
+
+            // Agregação de depósitos inspecionados
+            for (let key in resumo.totalDepInspecionados) {
+                resumo.totalDepInspecionados[key] += d.resumo.totalDepInspecionados[key] || 0;
+            }
+
+            // Agregação dos quarteirões (eliminando duplicatas)
+            if (d.resumo.quarteiroesTrabalhados) {
+                // Supondo que 'quarteiroesTrabalhados' é uma string de quarteirões separados por vírgula no Diario
+                d.resumo.quarteiroesTrabalhados
+                    .split(",")
+                    .forEach((q) => quarteiroesSet.add(q.trim()));
+            }
+
+            // Agregação dos dias trabalhados (eliminando duplicatas)
+            if (d.data) {
+                diasSet.add(d.data.toISOString().slice(0, 10));
+            }
+        });
+
+        // Finaliza o resumo e calcula dias trabalhados
+        resumo.quarteiroesTrabalhados = Array.from(quarteiroesSet)
+            .sort()
+            .join(", ");
+        const qtdDiasTrabalhados = diasSet.size;
+        
+        // 4. Cria o registro Semanal
+        const semanal = await Semanal.create({
+            idAgente,
+            idArea,
+            semana,
+            atividade: atividade || 4,
+            qtdDiasTrabalhados,
+            observacoes: "", // Adicionar observação, se necessário
+            resumo,         // <<< O objeto resumo inteiro, incluindo 'quarteiroesTrabalhados'
+            idsDiarios,     // <<< CORREÇÃO: Passando os IDs dos diários
+        });
+        
+        // Opcional: Atualizar os diários para marcar que foram processados (bom para evitar reprocessamento)
+        // await Diario.updateMany(
+        //     { _id: { $in: idsDiarios } },
+        //     { $set: { idSemanal: semanal._id, fechado: true } }
+        // );
+
+
+        res.status(201).json({ // Mudança para 201 Created
+            message: "Relatório semanal cadastrado com sucesso.",
+            semanal,
+        });
+
+    } catch (error) {
+        // Melhoria no tratamento de erro para diagnosticar o problema
+        if (error.name === 'CastError') {
+             return res.status(400).json({ 
+                message: "Erro de formato (CastError). Verifique se os IDs fornecidos são ObjectIds válidos.",
+                details: error.message
+             });
+        }
+        if (error.name === 'ValidationError') {
+             console.error("Erro de Validação Mongoose:", error.errors);
+             return res.status(400).json({ 
+                message: "Erro de validação: campos obrigatórios no resumo ou no modelo principal estão faltando.",
+                errors: error.errors
+             });
+        }
+        
+        console.error("Erro ao cadastrar relatório semanal:", error.message);
+        res.status(500).json({
+            message: "Erro ao cadastrar relatório semanal.",
+            error: error.message,
+        });
     }
-
-    const diarios = await Diario.find({
-      idAgente,
-      idArea,
-      semana,
-    });
-
-    if (!diarios.length) {
-      return res
-        .status(404)
-        .json({ message: "Nenhum diário encontrado para essa semana e área." });
-    }
-
-    const resumo = {
-      totalQuarteiroesTrabalhados: 0,
-      totalVisitas: 0,
-      totalVisitasTipo: { r: 0, c: 0, tb: 0, pe: 0, out: 0 },
-      totalDepInspecionados: { a1: 0, a2: 0, b: 0, c: 0, d1: 0, d2: 0, e: 0 },
-      totalDepEliminados: 0,
-      totalImoveisLarvicida: 0,
-      totalQtdLarvicida: 0,
-      totalDepLarvicida: 0,
-      imoveisComFoco: 0,
-    };
-
-    const quarteiroesSet = new Set();
-    const diasSet = new Set();
-
-    diarios.forEach((d) => {
-      resumo.totalQuarteiroesTrabalhados +=
-        d.resumo.totalQuarteiroesTrabalhados;
-      resumo.totalVisitas += d.resumo.totalVisitas;
-
-      for (let key in resumo.totalVisitasTipo) {
-        resumo.totalVisitasTipo[key] += d.resumo.totalVisitasTipo[key] || 0;
-      }
-
-      for (let key in resumo.totalDepInspecionados) {
-        resumo.totalDepInspecionados[key] +=
-          d.resumo.totalDepInspecionados[key] || 0;
-      }
-
-      resumo.totalDepEliminados += d.resumo.totalDepEliminados;
-      resumo.totalImoveisLarvicida += d.resumo.totalImoveisLarvicida;
-      resumo.totalQtdLarvicida += d.resumo.totalQtdLarvicida;
-      resumo.totalDepLarvicida += d.resumo.totalDepLarvicida;
-      resumo.imoveisComFoco += d.resumo.imoveisComFoco;
-
-      if (d.resumo.quarteiroesTrabalhados) {
-        d.resumo.quarteiroesTrabalhados
-          .split(",")
-          .forEach((q) => quarteiroesSet.add(q.trim()));
-      }
-
-      diasSet.add(d.data.toISOString().slice(0, 10));
-    });
-
-    resumo.quarteiroesTrabalhados = Array.from(quarteiroesSet)
-      .sort()
-      .join(", ");
-    const qtdDiasTrabalhados = diasSet.size;
-
-    const semanal = await Semanal.create({
-      idAgente,
-      idArea,
-      semana,
-      atividade: atividade || 4,
-      quarteiroesTrabalhados: resumo.quarteiroesTrabalhados,
-      qtdDiasTrabalhados,
-      resumo,
-    });
-
-    res.status(200).json({
-      message: "Relatório semanal cadastrado com sucesso.",
-      semanal,
-    });
-  } catch (error) {
-    res.status(500).json({
-      message: "Erro ao cadastrar relatório semanal.",
-      error: error.message,
-    });
-  }
 });
 
 app.post("/listarSemanal", async (req, res) => {
