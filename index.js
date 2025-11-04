@@ -32,7 +32,7 @@ const app = express();
 app.use(express.json());
 
 app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
+  console.log(`Servidor rodando em http://192.168.1.111:${PORT}`);
 });
 
 // LOGIN
@@ -230,34 +230,33 @@ app.get("/listarAreas", async (req, res) => {
 });
 
 app.get("/areas/:idArea", async (req, res) => {
-    const { idArea } = req.params;
+  const { idArea } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(idArea)) {
-        console.warn(`Tentativa de busca com ID inválido: ${idArea}`);
-        return res.status(400).json({ 
-            message: "ID de Área inválido. O ID deve ser um ObjectId válido." 
-        });
+  if (!mongoose.Types.ObjectId.isValid(idArea)) {
+    console.warn(`Tentativa de busca com ID inválido: ${idArea}`);
+    return res.status(400).json({
+      message: "ID de Área inválido. O ID deve ser um ObjectId válido.",
+    });
+  }
+
+  try {
+    const area = await Area.findById(idArea);
+
+    if (!area) {
+      return res.status(404).json({ message: "Área não encontrada." });
     }
 
-    try {
-        const area = await Area.findById(idArea);
-
-        if (!area) {
-            return res.status(404).json({ message: "Área não encontrada." });
-        }
-
-        res.status(200).json({ 
-            nome: area.nome || area.nomeArea || `Área ID: ${area._id}`,
-            id: area._id,
-        });
-        
-    } catch (error) {
-        console.error("Erro ao buscar área por ID:", error.message);
-        res.status(500).json({ 
-            message: "Erro interno no servidor ao buscar área.", 
-            error: error.message 
-        });
-    }
+    res.status(200).json({
+      nome: area.nome || area.nomeArea || `Área ID: ${area._id}`,
+      id: area._id,
+    });
+  } catch (error) {
+    console.error("Erro ao buscar área por ID:", error.message);
+    res.status(500).json({
+      message: "Erro interno no servidor ao buscar área.",
+      error: error.message,
+    });
+  }
 });
 
 app.put("/editarArea/:id", async (req, res) => {
@@ -384,8 +383,8 @@ app.get("/listarQuarteiroes/:idArea", async (req, res) => {
 
       {
         $lookup: {
-          from: "areas", 
-          localField: "idArea", 
+          from: "areas",
+          localField: "idArea",
           foreignField: "_id",
           as: "areaInfo",
         },
@@ -539,7 +538,7 @@ app.post("/resetarResponsaveis", async (req, res) => {
   try {
     const resultado = await Quarteirao.updateMany(
       { idResponsavel: { $exists: true, $ne: null } },
-      { $unset: { idResponsavel: "" } } 
+      { $unset: { idResponsavel: "" } }
     );
 
     res.status(200).json({
@@ -585,7 +584,7 @@ app.put("/atualizarQuarteiroes", async (req, res) => {
         $set: {
           dataTrabalho: dataUTC,
           trabalhadoPor: trabalhadoPor || null,
-          trabalhado: true, 
+          trabalhado: true,
         },
       }
     );
@@ -881,10 +880,10 @@ app.post("/cadastrarVisita", async (req, res) => {
       dataVisita,
       depositosInspecionados,
       qtdDepEliminado,
-      foco,
       qtdLarvicida,
       qtdDepTratado,
       status,
+      qtdFoco, // novo campo
     } = req.body;
 
     if (!idImovel || !idAgente) {
@@ -915,6 +914,10 @@ app.post("/cadastrarVisita", async (req, res) => {
       )
     );
 
+    // trata qtdFoco e foco automaticamente
+    const qtdFocoNumber = Number(qtdFoco) || 0;
+    const foco = qtdFocoNumber > 0;
+
     const novaVisita = await Visita.create({
       idImovel,
       idAgente,
@@ -922,10 +925,11 @@ app.post("/cadastrarVisita", async (req, res) => {
       dataVisita: dataUTC,
       depositosInspecionados,
       qtdDepEliminado,
-      foco,
       qtdLarvicida,
       qtdDepTratado,
       status,
+      qtdFoco: qtdFocoNumber,
+      foco,
     });
 
     await Imovel.findByIdAndUpdate(idImovel, { status: status });
@@ -1098,7 +1102,7 @@ app.get("/visitasPorData", async (req, res) => {
     visitas.forEach((v) => {
       const area = v.idImovel?.idQuarteirao?.idArea;
       const areaId = area?._id?.toString();
-      if (!areaId) return; 
+      if (!areaId) return;
 
       if (!resumoPorArea[areaId]) {
         resumoPorArea[areaId] = {
@@ -1152,7 +1156,7 @@ app.get("/visitasPorData", async (req, res) => {
     return res.status(200).json({
       message: "Resumo diário por área gerado com sucesso.",
       data,
-      resumoPorArea: Object.values(resumoPorArea), 
+      resumoPorArea: Object.values(resumoPorArea),
     });
   } catch (error) {
     console.error("Erro ao gerar resumo:", error);
@@ -1164,83 +1168,91 @@ app.get("/visitasPorData", async (req, res) => {
 });
 
 app.get("/visitas/detalhes/diario/:diarioId", async (req, res) => {
-    try {
-        const { diarioId } = req.params;
+  try {
+    const { diarioId } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(diarioId)) {
-            return res.status(400).json({ message: "ID do Diário inválido." });
-        }
-        
-        const diario = await Diario.findById(diarioId).select('resumo.idsVisitas').lean();
-        
-        if (!diario || !diario.resumo || !diario.resumo.idsVisitas || diario.resumo.idsVisitas.length === 0) {
-             return res.status(200).json([]);
-        }
-
-        const idsVisitas = diario.resumo.idsVisitas;
-        
-        const visitas = await Visita.find({
-            _id: { $in: idsVisitas }
-        })
-        .populate({
-            path: "idImovel",
-            select: "logradouro numero idQuarteirao tipo posicao", 
-            populate: {
-                path: "idQuarteirao",
-                select: "numero idArea",
-                populate: {
-                    path: "idArea",
-                    select: "nome" 
-                }
-            },
-        })
-        .lean(); 
-
-        if (!visitas.length) {
-            return res.status(200).json([]);
-        }
-
-        const visitasAgrupadas = {};
-
-        visitas.forEach(v => {
-            const quarteirao = v.idImovel?.idQuarteirao;
-            
-            if (!quarteirao || !quarteirao._id) return; 
-
-            const quarteiraoId = quarteirao._id.toString();
-
-            if (!visitasAgrupadas[quarteiraoId]) {
-                visitasAgrupadas[quarteiraoId] = {
-                    _id: quarteiraoId,
-                    numeroQuarteirao: quarteirao.numero || "QRT sem número",
-                    nomeArea: quarteirao.idArea?.nome || "Área Desconhecida",
-                    visitas: [],
-                };
-            }
-
-            visitasAgrupadas[quarteiraoId].visitas.push({
-                _id: v._id,
-                tipoImovel: v.idImovel.tipo || v.tipo, 
-                rua: v.idImovel.logradouro || "Rua não informada", 
-                numeroImovel: v.idImovel.numero || "S/N",
-                dataVisita: v.dataVisita,
-                posicaoImovel: v.idImovel.posicao, 
-            });
-        });
-
-        const resultadoFinal = Object.values(visitasAgrupadas);
-
-        return res.status(200).json(resultadoFinal);
-
-    } catch (error) {
-        console.error("ERRO CRÍTICO na rota /visitas/detalhes/diario/:diarioId:", error); 
-        res.status(500).json({ 
-            message: "Erro interno no servidor ao buscar detalhes das visitas.", 
-            error: error.message 
-        });
+    if (!mongoose.Types.ObjectId.isValid(diarioId)) {
+      return res.status(400).json({ message: "ID do Diário inválido." });
     }
-});
 
+    const diario = await Diario.findById(diarioId)
+      .select("resumo.idsVisitas")
+      .lean();
+
+    if (
+      !diario ||
+      !diario.resumo ||
+      !diario.resumo.idsVisitas ||
+      diario.resumo.idsVisitas.length === 0
+    ) {
+      return res.status(200).json([]);
+    }
+
+    const idsVisitas = diario.resumo.idsVisitas;
+
+    const visitas = await Visita.find({
+      _id: { $in: idsVisitas },
+    })
+      .populate({
+        path: "idImovel",
+        select: "logradouro numero idQuarteirao tipo posicao",
+        populate: {
+          path: "idQuarteirao",
+          select: "numero idArea",
+          populate: {
+            path: "idArea",
+            select: "nome",
+          },
+        },
+      })
+      .lean();
+
+    if (!visitas.length) {
+      return res.status(200).json([]);
+    }
+
+    const visitasAgrupadas = {};
+
+    visitas.forEach((v) => {
+      const quarteirao = v.idImovel?.idQuarteirao;
+
+      if (!quarteirao || !quarteirao._id) return;
+
+      const quarteiraoId = quarteirao._id.toString();
+
+      if (!visitasAgrupadas[quarteiraoId]) {
+        visitasAgrupadas[quarteiraoId] = {
+          _id: quarteiraoId,
+          numeroQuarteirao: quarteirao.numero || "QRT sem número",
+          nomeArea: quarteirao.idArea?.nome || "Área Desconhecida",
+          visitas: [],
+        };
+      }
+
+      visitasAgrupadas[quarteiraoId].visitas.push({
+        _id: v._id,
+        tipoImovel: v.idImovel.tipo || v.tipo,
+        rua: v.idImovel.logradouro || "Rua não informada",
+        numeroImovel: v.idImovel.numero || "S/N",
+        dataVisita: v.dataVisita,
+        posicaoImovel: v.idImovel.posicao,
+      });
+    });
+
+    const resultadoFinal = Object.values(visitasAgrupadas);
+
+    return res.status(200).json(resultadoFinal);
+  } catch (error) {
+    console.error(
+      "ERRO CRÍTICO na rota /visitas/detalhes/diario/:diarioId:",
+      error
+    );
+    res.status(500).json({
+      message: "Erro interno no servidor ao buscar detalhes das visitas.",
+      error: error.message,
+    });
+  }
+});
 
 app.put("/editarVisita/:id", async (req, res) => {
   try {
@@ -1367,7 +1379,7 @@ app.post("/cadastrarDiario", async (req, res) => {
       atividade: atividade || 4,
       resumo: {
         quarteiroes: resumo.quarteiroes || [],
-        totalQuarteiroes: resumo.totalQuarteiroes || 0, 
+        totalQuarteiroes: resumo.totalQuarteiroes || 0,
         totalVisitas: resumo.totalVisitas,
         totalVisitasTipo: resumo.totalVisitasTipo || {},
         totalDepInspecionados: resumo.totalDepInspecionados || {},
@@ -1376,7 +1388,7 @@ app.post("/cadastrarDiario", async (req, res) => {
         totalQtdLarvicida: resumo.totalQtdLarvicida || 0,
         totalDepLarvicida: resumo.totalDepLarvicida || 0,
         imoveisComFoco: resumo.imoveisComFoco || 0,
-        idsVisitas: resumo.idsVisitas || [], 
+        idsVisitas: resumo.idsVisitas || [],
       },
     });
 
@@ -1545,8 +1557,12 @@ app.delete("/excluirDiario/:id", async (req, res) => {
 app.get("/resumoDiario", async (req, res) => {
   try {
     const { idAgente, data } = req.query;
+    console.log("📥 Requisição recebida em /resumoDiario");
+    console.log("🔹 idAgente:", idAgente);
+    console.log("🔹 data:", data);
 
     if (!idAgente || !data) {
+      console.log("⚠️ Faltando parâmetros obrigatórios!");
       return res
         .status(400)
         .json({ message: "Os campos 'idAgente' e 'data' são obrigatórios." });
@@ -1572,13 +1588,23 @@ app.get("/resumoDiario", async (req, res) => {
       999
     );
 
+    console.log(
+      "🕒 Intervalo de busca:",
+      inicio.toISOString(),
+      "→",
+      fim.toISOString()
+    );
+
+    // Busca os quarteirões
     const quarteiroes = await Quarteirao.find({
       trabalhadoPor: idAgente,
       dataTrabalho: { $gte: inicio, $lte: fim },
     })
       .populate("idArea", "nome")
       .lean();
+    console.log(`📦 Quarteirões encontrados: ${quarteiroes.length}`);
 
+    // Busca as visitas
     const visitas = await Visita.find({
       idAgente,
       dataVisita: { $gte: inicio, $lte: fim },
@@ -1593,13 +1619,25 @@ app.get("/resumoDiario", async (req, res) => {
       .populate("idAgente", "nome")
       .lean();
 
+    console.log(`👣 Visitas encontradas: ${visitas.length}`);
+    if (visitas.length > 0) {
+      console.log("🧾 Primeira visita de exemplo:", {
+        _id: visitas[0]._id,
+        dataVisita: visitas[0].dataVisita,
+        foco: visitas[0].foco,
+        qtdFoco: visitas[0].qtdFoco,
+        idImovel: visitas[0].idImovel?._id,
+      });
+    }
+
+    // Busca os diários
     const diarios = await Diario.find({
       idAgente,
       data: { $gte: inicio, $lte: fim },
     }).lean();
+    console.log(`📘 Diários encontrados: ${diarios.length}`);
 
     const areasFechadas = diarios.map((d) => d.idArea.toString());
-
     const resumoPorArea = {};
 
     quarteiroes.forEach((q) => {
@@ -1631,7 +1669,7 @@ app.get("/resumoDiario", async (req, res) => {
           quarteiroes: [],
           totalQuarteiroes: 0,
           jaFechado: areasFechadas.includes(areaId),
-          idsVisitas: [], 
+          idsVisitas: [],
         };
       }
 
@@ -1674,9 +1712,8 @@ app.get("/resumoDiario", async (req, res) => {
       }
 
       const resumo = resumoPorArea[areaId];
-
       resumo.totalVisitas++;
-      resumo.idsVisitas.push(v._id.toString()); 
+      resumo.idsVisitas.push(v._id.toString());
 
       if (resumo.totalPorTipoImovel[v.tipo] !== undefined) {
         resumo.totalPorTipoImovel[v.tipo]++;
@@ -1695,8 +1732,12 @@ app.get("/resumoDiario", async (req, res) => {
       }
 
       resumo.totalAmostras += (v.amostraFinal || 0) - (v.amostraInicial || 0);
+
       if (v.foco) resumo.totalFocos++;
     });
+
+    console.log("✅ Resumo diário gerado com sucesso!");
+    console.log("📊 Áreas com resumo:", Object.keys(resumoPorArea).length);
 
     return res.status(200).json({
       message: "Resumo diário gerado com sucesso.",
@@ -1710,10 +1751,10 @@ app.get("/resumoDiario", async (req, res) => {
         dataTrabalho: q.dataTrabalho,
         trabalhado: q.trabalhado,
       })),
-      resumoPorArea: Object.values(resumoPorArea), 
+      resumoPorArea: Object.values(resumoPorArea),
     });
   } catch (error) {
-    console.error(error);
+    console.error("❌ Erro no resumo diário:", error);
     res.status(500).json({
       message: "Erro ao gerar resumo diário.",
       error: error.message,
@@ -1932,7 +1973,7 @@ app.post("/resetarCiclo/:id", async (req, res) => {
     );
 
     const resultadoQuarteiroes = await Quarteirao.updateMany(
-      {}, 
+      {},
       {
         $set: {
           trabalhado: false,

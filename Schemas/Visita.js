@@ -47,6 +47,10 @@ const visitaModel = new Schema({
     type: Boolean,
     default: false,
   },
+  qtdFoco: {
+    type: Number,
+    default: 0,
+  },
   qtdLarvicida: {
     type: Number,
     default: 0,
