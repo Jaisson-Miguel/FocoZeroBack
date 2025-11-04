@@ -80,6 +80,11 @@ const semanalModel = new Schema({
         default: 0, 
     }
   },
+  idsDiarios: {
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: "Diario",
+    default: [],
+  },
 });
 
 export default model("Semanal", semanalModel);
