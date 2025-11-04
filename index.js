@@ -32,7 +32,7 @@ const app = express();
 app.use(express.json());
 
 app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://192.168.1.111:${PORT}`);
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
 });
 
 // LOGIN
