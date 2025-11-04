@@ -74,6 +74,10 @@ const diarioModel = new Schema({
       type: Number,
       default: 0,
     },
+    totalFocos: {
+      type: Number,
+      default: 0,
+    },
     idsVisitas: {
       type: [mongoose.Schema.Types.ObjectId],
       ref: "Visita",

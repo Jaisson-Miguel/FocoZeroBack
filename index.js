@@ -1355,7 +1355,7 @@ app.delete("/excluirVisita", async (req, res) => {
 // DIÁRIO
 app.post("/cadastrarDiario", async (req, res) => {
   try {
-    const { idAgente, idArea, data, atividade, resumo, idsVisitas } = req.body;
+    const { idAgente, idArea, data, atividade, resumo } = req.body;
 
     if (!idAgente || !idArea || !data || !resumo) {
       return res
@@ -1370,11 +1370,6 @@ app.post("/cadastrarDiario", async (req, res) => {
     const inicioDia = new Date(Date.UTC(ano, mes, dia, 0, 0, 0, 0));
 
     const semana = numeroSemana(inicioDia);
-
-    let totalImoveisComFoco = 0;
-    if (idsVisitas && Array.isArray(idsVisitas)) {
-      totalImoveisComFoco = idsVisitas.filter((v) => v.foco === true).length;
-    }
 
     const diario = await Diario.create({
       idAgente,
@@ -1392,7 +1387,8 @@ app.post("/cadastrarDiario", async (req, res) => {
         totalImoveisLarvicida: resumo.totalImoveisLarvicida || 0,
         totalQtdLarvicida: resumo.totalQtdLarvicida || 0,
         totalDepLarvicida: resumo.totalDepLarvicida || 0,
-        imoveisComFoco: totalImoveisComFoco,
+        imoveisComFoco: resumo.imoveisComFoco || 0, // vindo do front
+        totalFocos: resumo.totalFocos || 0, // vindo do front
         idsVisitas: resumo.idsVisitas || [],
       },
     });
@@ -1623,17 +1619,7 @@ app.get("/resumoDiario", async (req, res) => {
       })
       .populate("idAgente", "nome")
       .lean();
-
     console.log(`👣 Visitas encontradas: ${visitas.length}`);
-    if (visitas.length > 0) {
-      console.log("🧾 Primeira visita de exemplo:", {
-        _id: visitas[0]._id,
-        dataVisita: visitas[0].dataVisita,
-        foco: visitas[0].foco,
-        qtdFoco: visitas[0].qtdFoco,
-        idImovel: visitas[0].idImovel?._id,
-      });
-    }
 
     // Busca os diários
     const diarios = await Diario.find({
@@ -1645,6 +1631,7 @@ app.get("/resumoDiario", async (req, res) => {
     const areasFechadas = diarios.map((d) => d.idArea.toString());
     const resumoPorArea = {};
 
+    // Monta estrutura inicial por área
     quarteiroes.forEach((q) => {
       const area = q.idArea;
       const areaId = area?._id?.toString();
@@ -1670,7 +1657,8 @@ app.get("/resumoDiario", async (req, res) => {
           totalLarvicidaAplicada: 0,
           depositosTratadosComLarvicida: 0,
           totalAmostras: 0,
-          totalFocos: 0,
+          totalFocos: 0, // qtdFocos
+          imoveisComFoco: 0, // visitas com foco
           quarteiroes: [],
           totalQuarteiroes: 0,
           jaFechado: areasFechadas.includes(areaId),
@@ -1683,6 +1671,7 @@ app.get("/resumoDiario", async (req, res) => {
       resumo.totalQuarteiroes = resumo.quarteiroes.length;
     });
 
+    // Processa as visitas
     visitas.forEach((v) => {
       const area = v.idImovel?.idQuarteirao?.idArea;
       const areaId = area?._id?.toString();
@@ -1709,6 +1698,7 @@ app.get("/resumoDiario", async (req, res) => {
           depositosTratadosComLarvicida: 0,
           totalAmostras: 0,
           totalFocos: 0,
+          imoveisComFoco: 0,
           quarteiroes: [],
           totalQuarteiroes: 0,
           jaFechado: areasFechadas.includes(areaId),
@@ -1738,7 +1728,9 @@ app.get("/resumoDiario", async (req, res) => {
 
       resumo.totalAmostras += (v.amostraFinal || 0) - (v.amostraInicial || 0);
 
-      if (v.foco) resumo.totalFocos++;
+      // Soma focos
+      resumo.totalFocos += v.qtdFoco || (v.foco ? 1 : 0); // qtdFocos
+      if (v.foco) resumo.imoveisComFoco++; // visitas com foco
     });
 
     console.log("✅ Resumo diário gerado com sucesso!");
@@ -1911,6 +1903,7 @@ app.post("/cadastrarSemanal", async (req, res) => {
       totalQtdLarvicida: 0,
       totalDepLarvicida: 0,
       imoveisComFoco: 0,
+      totalFocos: 0,
     };
 
     const quarteiroesSet = new Set();
@@ -1926,6 +1919,7 @@ app.post("/cadastrarSemanal", async (req, res) => {
       resumo.totalQtdLarvicida += d.resumo.totalQtdLarvicida || 0;
       resumo.totalDepLarvicida += d.resumo.totalDepLarvicida || 0;
       resumo.imoveisComFoco += d.resumo.imoveisComFoco || 0;
+      resumo.totalFocos += Number(d.resumo.totalFocos || 0);
 
       // Agregação de tipos de visita
       for (let key in resumo.totalVisitasTipo) {
@@ -2171,27 +2165,88 @@ app.get("/resumoCiclo/:id", async (req, res) => {
       })
       .lean();
 
+    // Busca semanais sem ciclo
     const semanaisVazios = await Semanal.find({ ciclo: { $exists: false } })
       .populate("idArea")
       .lean();
 
-    console.log("Semanais com ciclo vazio:", semanaisVazios);
+    // Agrupa resumo dos semanais por área
+    const resumoSemanaisPorArea = {};
 
-    if (!imoveis.length) {
-      return res.status(200).json({
-        message: "Nenhum imóvel encontrado.",
-        totalVisitados: 0,
-        totalNaoVisitados: 0,
-        totalGeral: 0,
-        percentualNaoVisitados: 0,
-        resumo: [],
-        semanaisVazios, // envia pro front se quiser conferir
-      });
-    }
+    semanaisVazios.forEach((s) => {
+      const area = s.idArea;
+      if (!area) return;
 
-    // Agrupa por área
+      const idArea = area._id.toString();
+      if (!resumoSemanaisPorArea[idArea]) {
+        resumoSemanaisPorArea[idArea] = {
+          idArea,
+          nomeArea: area.nome,
+          totalQuarteiroesTrabalhados: 0,
+          totalVisitas: 0,
+          totalDepEliminados: 0,
+          totalImoveisLarvicida: 0,
+          totalQtdLarvicida: 0,
+          totalDepLarvicida: 0,
+          imoveisComFoco: 0,
+          totalFocos: 0,
+          totalVisitasTipo: { r: 0, c: 0, tb: 0, pe: 0, out: 0 },
+          totalDepInspecionados: {
+            a1: 0,
+            a2: 0,
+            b: 0,
+            c: 0,
+            d1: 0,
+            d2: 0,
+            e: 0,
+          },
+          quarteiroesTrabalhados: new Set(),
+        };
+      }
+
+      const resumo = resumoSemanaisPorArea[idArea];
+
+      // Soma os campos
+      resumo.totalQuarteiroesTrabalhados +=
+        s.resumo.totalQuarteiroesTrabalhados || 0;
+      resumo.totalVisitas += s.resumo.totalVisitas || 0;
+      resumo.totalDepEliminados += s.resumo.totalDepEliminados || 0;
+      resumo.totalImoveisLarvicida += s.resumo.totalImoveisLarvicida || 0;
+      resumo.totalQtdLarvicida += s.resumo.totalQtdLarvicida || 0;
+      resumo.totalDepLarvicida += s.resumo.totalDepLarvicida || 0;
+      resumo.imoveisComFoco += s.resumo.imoveisComFoco || 0;
+      resumo.totalFocos += s.resumo.totalFocos || 0;
+
+      // Soma tipos de visita
+      for (let key in resumo.totalVisitasTipo) {
+        resumo.totalVisitasTipo[key] += s.resumo.totalVisitasTipo[key] || 0;
+      }
+
+      // Soma depósitos inspecionados
+      for (let key in resumo.totalDepInspecionados) {
+        resumo.totalDepInspecionados[key] +=
+          s.resumo.totalDepInspecionados[key] || 0;
+      }
+
+      // Junta quarteirões trabalhados sem duplicar
+      if (s.resumo.quarteiroesTrabalhados) {
+        s.resumo.quarteiroesTrabalhados
+          .split(",")
+          .forEach((q) => resumo.quarteiroesTrabalhados.add(q.trim()));
+      }
+    });
+
+    // Converte Set em string para enviar ao frontend
+    Object.values(resumoSemanaisPorArea).forEach((area) => {
+      area.quarteiroesTrabalhados = Array.from(area.quarteiroesTrabalhados)
+        .sort()
+        .join(", ");
+    });
+
+    const resumoSemanaPorAreaArray = Object.values(resumoSemanaisPorArea);
+
+    // Agrupa por área também os imóveis
     const agrupadoPorArea = {};
-
     for (const imovel of imoveis) {
       const area = imovel.idQuarteirao?.idArea;
       if (!area) continue;
@@ -2223,24 +2278,22 @@ app.get("/resumoCiclo/:id", async (req, res) => {
       (i) => i.status !== "visitado"
     ).length;
     const totalGeral = totalVisitados + totalNaoVisitados;
-
-    // Percentual de não visitados
     const percentualNaoVisitados =
       totalGeral > 0 ? ((totalNaoVisitados / totalGeral) * 100).toFixed(2) : 0;
 
     res.status(200).json({
-      message: "Resumo de imóveis gerado com sucesso.",
+      message: "Resumo de imóveis e semanais gerado com sucesso.",
       totalVisitados,
       totalNaoVisitados,
       totalGeral,
       percentualNaoVisitados: Number(percentualNaoVisitados),
-      resumo: resultado,
-      semanaisVazios, // envia os semanais com ciclo vazio para conferir
+      resumoImoveis: resultado,
+      resumoSemanaisPorArea: resumoSemanaPorAreaArray,
     });
   } catch (error) {
     console.error("Erro no /resumoCiclo:", error);
     res.status(500).json({
-      message: "Erro ao gerar resumo de imóveis.",
+      message: "Erro ao gerar resumo de imóveis e semanais.",
       error: error.message,
     });
   }

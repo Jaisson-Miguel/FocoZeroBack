@@ -82,6 +82,10 @@ const semanalModel = new Schema({
       type: Number,
       default: 0,
     },
+    totalFocos: {
+      type: Number,
+      default: 0,
+    },
   },
   idsDiarios: {
     type: [mongoose.Schema.Types.ObjectId],
