@@ -1275,15 +1275,15 @@ app.put("/editarVisita/:id", async (req, res) => {
 
     const dataAtualizada = dataVisita
       ? new Date(
-        Date.UTC(
-          new Date(dataVisita).getFullYear(),
-          new Date(dataVisita).getMonth(),
-          new Date(dataVisita).getDate(),
-          0,
-          0,
-          0
+          Date.UTC(
+            new Date(dataVisita).getFullYear(),
+            new Date(dataVisita).getMonth(),
+            new Date(dataVisita).getDate(),
+            0,
+            0,
+            0
+          )
         )
-      )
       : visitaExiste.dataVisita;
 
     const visitaAtualizada = await Visita.findByIdAndUpdate(
@@ -1493,15 +1493,15 @@ app.put("/editarDiario/:id", async (req, res) => {
 
     const dataAtualizada = data
       ? new Date(
-        Date.UTC(
-          new Date(data).getFullYear(),
-          new Date(data).getMonth(),
-          new Date(data).getDate(),
-          0,
-          0,
-          0
+          Date.UTC(
+            new Date(data).getFullYear(),
+            new Date(data).getMonth(),
+            new Date(data).getDate(),
+            0,
+            0,
+            0
+          )
         )
-      )
       : diarioExiste.data;
 
     const diarioAtualizado = await Diario.findByIdAndUpdate(
@@ -2243,6 +2243,69 @@ app.get("/resumoCiclo/:id", async (req, res) => {
       message: "Erro ao gerar resumo de imóveis e semanais.",
       error: error.message,
     });
+  }
+});
+
+app.get("/FocosPorArea", async (req, res) => {
+  try {
+    const { ordenarPor } = req.query; // "imoveis" ou "foco"
+
+    const areas = await Area.find().lean();
+
+    if (!areas || areas.length === 0) {
+      return res.status(404).json({ message: "Áreas não encontradas" });
+    }
+
+    const resumoPorArea = [];
+
+    for (const area of areas) {
+      // Quarteirões da área
+      const quarteiroes = await Quarteirao.find({ idArea: area._id }).lean();
+      const quarteiroesIds = quarteiroes.map((q) => q._id);
+
+      // Imóveis desses quarteirões
+      const imoveis = await Imovel.find({
+        idQuarteirao: { $in: quarteiroesIds },
+      }).lean();
+      const imoveisIds = imoveis.map((i) => i._id);
+
+      // Visitas desses imóveis
+      const visitas = await Visita.find({
+        idImovel: { $in: imoveisIds },
+      }).lean();
+
+      let totalFocos = 0;
+      const imoveisComFocoSet = new Set();
+
+      visitas.forEach((v) => {
+        if (v.qtdFoco && v.qtdFoco > 0) {
+          totalFocos += v.qtdFoco; // soma a qtdFoco
+          imoveisComFocoSet.add(v.idImovel.toString());
+        }
+      });
+
+      resumoPorArea.push({
+        idArea: area._id,
+        nomeArea: area.nome,
+        totalFocos,
+        imoveisComFoco: imoveisComFocoSet.size,
+      });
+    }
+
+    // Ordena dependendo do query param
+    if (ordenarPor === "foco") {
+      resumoPorArea.sort((a, b) => b.totalFocos - a.totalFocos);
+    } else {
+      // padrão ou "imoveis"
+      resumoPorArea.sort((a, b) => b.imoveisComFoco - a.imoveisComFoco);
+    }
+
+    res.json(resumoPorArea);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Erro ao gerar resumo de focos", error: error.message });
   }
 });
 
