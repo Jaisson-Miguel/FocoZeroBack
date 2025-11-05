@@ -2317,12 +2317,10 @@ app.get("/focosPorQuarteirao", async (req, res) => {
       return res.status(400).json({ message: "idArea é obrigatório" });
     }
 
-    // Verificar se o ID é válido no formato do MongoDB
     if (!mongoose.Types.ObjectId.isValid(idArea)) {
       return res.status(400).json({ message: "idArea inválido" });
     }
 
-    // Buscar todos os quarteirões da área
     const quarteiroes = await Quarteirao.find({ idArea }).lean();
 
     if (!quarteiroes.length) {
@@ -2354,14 +2352,21 @@ app.get("/focosPorQuarteirao", async (req, res) => {
         idImovel: { $in: imovelIds },
       }).lean();
 
-      const totalFocos = visitas.reduce((acc, v) => acc + (v.qtdFoco || 0), 0);
-      const imoveisComFoco = imoveis.filter((i) => i.foco === true).length;
+      let totalFocos = 0;
+      const imoveisComFocoSet = new Set();
+
+      visitas.forEach((v) => {
+        if (v.qtdFoco && v.qtdFoco > 0) {
+          totalFocos += v.qtdFoco;
+          imoveisComFocoSet.add(v.idImovel.toString());
+        }
+      });
 
       resultado.push({
         idQuarteirao: quarteirao._id,
         numero: quarteirao.numero,
         totalFocos,
-        imoveisComFoco,
+        imoveisComFoco: imoveisComFocoSet.size,
       });
     }
 
