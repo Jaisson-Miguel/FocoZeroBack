@@ -2317,6 +2317,11 @@ app.get("/focosPorQuarteirao", async (req, res) => {
       return res.status(400).json({ message: "idArea é obrigatório" });
     }
 
+    // Verificar se o ID é válido no formato do MongoDB
+    if (!mongoose.Types.ObjectId.isValid(idArea)) {
+      return res.status(400).json({ message: "idArea inválido" });
+    }
+
     // Buscar todos os quarteirões da área
     const quarteiroes = await Quarteirao.find({ idArea }).lean();
 
@@ -2329,7 +2334,6 @@ app.get("/focosPorQuarteirao", async (req, res) => {
     const resultado = [];
 
     for (const quarteirao of quarteiroes) {
-      // Buscar imóveis do quarteirão
       const imoveis = await Imovel.find({
         idQuarteirao: quarteirao._id,
       }).lean();
@@ -2346,15 +2350,11 @@ app.get("/focosPorQuarteirao", async (req, res) => {
 
       const imovelIds = imoveis.map((i) => i._id);
 
-      // Buscar visitas dos imóveis
       const visitas = await Visita.find({
         idImovel: { $in: imovelIds },
       }).lean();
 
-      // Somar focos
       const totalFocos = visitas.reduce((acc, v) => acc + (v.qtdFoco || 0), 0);
-
-      // Contar imóveis com foco true
       const imoveisComFoco = imoveis.filter((i) => i.foco === true).length;
 
       resultado.push({
@@ -2368,12 +2368,10 @@ app.get("/focosPorQuarteirao", async (req, res) => {
     res.json(resultado);
   } catch (error) {
     console.error("Erro ao calcular focos por quarteirão:", error);
-    res
-      .status(500)
-      .json({
-        message: "Erro ao calcular focos por quarteirão",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "Erro ao calcular focos por quarteirão",
+      error: error.message,
+    });
   }
 });
 
