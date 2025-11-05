@@ -2309,6 +2309,74 @@ app.get("/FocosPorArea", async (req, res) => {
   }
 });
 
+app.get("/focosPorQuarteirao", async (req, res) => {
+  try {
+    const { idArea } = req.query;
+
+    if (!idArea) {
+      return res.status(400).json({ message: "idArea é obrigatório" });
+    }
+
+    // Buscar todos os quarteirões da área
+    const quarteiroes = await Quarteirao.find({ idArea }).lean();
+
+    if (!quarteiroes.length) {
+      return res
+        .status(404)
+        .json({ message: "Nenhum quarteirão encontrado nessa área" });
+    }
+
+    const resultado = [];
+
+    for (const quarteirao of quarteiroes) {
+      // Buscar imóveis do quarteirão
+      const imoveis = await Imovel.find({
+        idQuarteirao: quarteirao._id,
+      }).lean();
+
+      if (!imoveis.length) {
+        resultado.push({
+          idQuarteirao: quarteirao._id,
+          numero: quarteirao.numero,
+          totalFocos: 0,
+          imoveisComFoco: 0,
+        });
+        continue;
+      }
+
+      const imovelIds = imoveis.map((i) => i._id);
+
+      // Buscar visitas dos imóveis
+      const visitas = await Visita.find({
+        idImovel: { $in: imovelIds },
+      }).lean();
+
+      // Somar focos
+      const totalFocos = visitas.reduce((acc, v) => acc + (v.qtdFoco || 0), 0);
+
+      // Contar imóveis com foco true
+      const imoveisComFoco = imoveis.filter((i) => i.foco === true).length;
+
+      resultado.push({
+        idQuarteirao: quarteirao._id,
+        numero: quarteirao.numero,
+        totalFocos,
+        imoveisComFoco,
+      });
+    }
+
+    res.json(resultado);
+  } catch (error) {
+    console.error("Erro ao calcular focos por quarteirão:", error);
+    res
+      .status(500)
+      .json({
+        message: "Erro ao calcular focos por quarteirão",
+        error: error.message,
+      });
+  }
+});
+
 function numeroSemana(data) {
   const d = new Date(data);
   d.setHours(0, 0, 0, 0);
