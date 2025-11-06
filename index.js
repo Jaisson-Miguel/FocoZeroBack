@@ -901,17 +901,19 @@ app.post("/cadastrarVisita", async (req, res) => {
       return res.status(400).json({ message: "Este imóvel já foi visitado." });
     }
 
-    const dataBruta = dataVisita ? new Date(dataVisita) : new Date();
+    // Cria a data com hora 00:00 local e remove o fuso antes de salvar
+    const hoje = dataVisita ? new Date(dataVisita) : new Date();
+    const dataLocal = new Date(
+      hoje.getFullYear(),
+      hoje.getMonth(),
+      hoje.getDate(),
+      0,
+      0,
+      0,
+      0
+    );
     const dataUTC = new Date(
-      Date.UTC(
-        dataBruta.getFullYear(),
-        dataBruta.getMonth(),
-        dataBruta.getDate(),
-        0,
-        0,
-        0,
-        0
-      )
+      dataLocal.getTime() - dataLocal.getTimezoneOffset() * 60000
     );
 
     const qtdFocoNumber = Number(qtdFoco) || 0;
@@ -938,9 +940,10 @@ app.post("/cadastrarVisita", async (req, res) => {
       visita: novaVisita,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Erro ao lançar visita.", error: error.message });
+    res.status(500).json({
+      message: "Erro ao lançar visita.",
+      error: error.message,
+    });
   }
 });
 
